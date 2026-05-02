@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700&family=JetBrains+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&family=Lora:wght@400;500;600;700&family=Nunito:wght@300;400;600;700&family=Merriweather:wght@300;400;700&family=Quicksand:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--theme-font, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#f5f5f5] font-sans antialiased;
+    color: var(--theme-text-color, #1a1a1a);
+  }
+  
+  h1, h2, h3, h4, h5, h6, .text-neutral-900 {
+    color: var(--theme-text-color, #171717) !important;
+  }
+  .text-neutral-800 {
+    color: var(--theme-text-color, #262626) !important;
+  }
+  
+  /* Buttons can keep their text logic, but if they have specific neutral-900 backgrounds, we might want to let them be */
+  .bg-neutral-900 {
+    background-color: var(--theme-text-color, #171717) !important;
+  }
+  .text-white {
+    color: #ffffff !important;
+  }
+}
+
+@layer components {
+  /* Clean utility cards */
+  .card {
+    @apply bg-white rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-neutral-100;
+  }
+  
+  /* Form elements */
+  .input-field {
+    @apply w-full bg-[#f8f9fa] border border-neutral-200 rounded-2xl p-4 text-base focus:ring-2 focus:ring-neutral-900 outline-none transition-all;
+  }
+  
+  .btn-primary {
+    @apply bg-neutral-900 text-white rounded-2xl py-3 px-6 font-semibold shadow-sm hover:bg-neutral-800 transition-all active:scale-[0.98];
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-neutral-900 rounded-2xl py-3 px-6 font-semibold border border-neutral-200 shadow-sm hover:bg-neutral-50 transition-all active:scale-[0.98];
+  }
+
+  /* Micro-labels */
+  .micro-label {
+    @apply text-[10px] font-bold text-neutral-400 uppercase tracking-widest;
+  }
+}
+
+.glow {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .min-h-screen-safe {
+    min-height: calc(100vh - env(safe-area-inset-bottom) - env(safe-area-inset-top));
+  }
+}

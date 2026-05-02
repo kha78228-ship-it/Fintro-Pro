@@ -1,0 +1,25 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+}, (firebaseConfig as any).firestoreDatabaseId); // Use ID from config if present
+export const googleProvider = new GoogleAuthProvider();
+
+export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+
+// Connection test as required by instructions
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration or network.");
+    }
+  }
+}
+testConnection();
