@@ -36,6 +36,8 @@ export default function SharedFund({ user }: SharedFundProps) {
   const [members, setMembers] = useState<Record<string, { role: string, income: number, displayName: string }>>({});
   const [funds, setFunds] = useState<Fund[]>([]);
   const [myIncomeSync, setMyIncomeSync] = useState<string>('');
+  const [contributionMode, setContributionMode] = useState<'income' | 'equal' | 'custom'>('income');
+  const [isEditingRatio, setIsEditingRatio] = useState(false);
 
   const [isCopied, setIsCopied] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -127,6 +129,7 @@ export default function SharedFund({ user }: SharedFundProps) {
           setSharedFundDoc({ id: docSnap.id, ...data });
           setMembers(data.members || {});
           setFunds(data.funds || []);
+          setContributionMode(data.contributionMode || 'income');
           if (data.members && data.members[user.uid]) {
             setMyIncomeSync(data.members[user.uid].income?.toString() || '0');
           }
@@ -147,11 +150,13 @@ export default function SharedFund({ user }: SharedFundProps) {
     const data = {
       ownerId: user.uid,
       memberIds: [user.uid],
+      contributionMode: 'income',
       members: {
         [user.uid]: {
           role: 'owner',
           income: 0,
-          displayName: user.displayName || 'Trưởng nhóm'
+          displayName: user.displayName || 'Trưởng nhóm',
+          customRatio: 100
         }
       },
       funds: [
@@ -165,6 +170,40 @@ export default function SharedFund({ user }: SharedFundProps) {
       await setDoc(doc(db, 'shared_funds', newFundId), data);
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, `shared_funds/${newFundId}`);
+    }
+  };
+
+  const handleUpdateContributionMode = async (mode: 'income' | 'equal' | 'custom') => {
+    if (!sharedFundDoc) return;
+    try {
+      const fundRef = doc(db, 'shared_funds', sharedFundDoc.id);
+      
+      // If switching to custom and no ratios set, initialize them equally
+      let updateData: any = { contributionMode: mode };
+      if (mode === 'custom') {
+         const mems = Object.keys(members);
+         const equalRatio = 100 / mems.length;
+         mems.forEach(uid => {
+            updateData[`members.${uid}.customRatio`] = members[uid].customRatio || equalRatio;
+         });
+      }
+
+      await updateDoc(fundRef, updateData);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `shared_funds/${sharedFundDoc.id}`);
+    }
+  };
+
+  const handleUpdateCustomRatio = async (uid: string, ratio: string) => {
+    if (!sharedFundDoc) return;
+    const newRatio = parseFloat(ratio) || 0;
+    try {
+      const fundRef = doc(db, 'shared_funds', sharedFundDoc.id);
+      await updateDoc(fundRef, {
+        [`members.${uid}.customRatio`]: newRatio
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `shared_funds/${sharedFundDoc.id}`);
     }
   };
 
@@ -184,9 +223,10 @@ export default function SharedFund({ user }: SharedFundProps) {
 
   const memberList = Object.entries(members || {}).map(([uid, m]) => {
     const mem = m as any;
-    return { uid, role: mem?.role, income: mem?.income, displayName: mem?.displayName };
+    return { uid, role: mem?.role, income: mem?.income, displayName: mem?.displayName, customRatio: mem?.customRatio };
   });
   const totalIncome = memberList.reduce((acc, m) => acc + (m.income || 0), 0);
+  const totalCustomRatio = memberList.reduce((acc, m) => acc + (m.customRatio || 0), 0);
   const parsedSharedTotal = totalIncome;
 
   const handleCopyLink = () => {
@@ -361,24 +401,98 @@ export default function SharedFund({ user }: SharedFundProps) {
           </div>
 
           <div className="space-y-6">
+            <div className="bg-white rounded-xl p-4 border border-amber-200">
+               <label className="text-sm font-semibold text-amber-900 block mb-3">Chế độ phân bổ đóng góp</label>
+               <div className="flex bg-neutral-100 p-1 rounded-lg">
+                  <button 
+                     onClick={() => handleUpdateContributionMode('income')}
+                     className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors ${contributionMode === 'income' ? 'bg-white shadow-sm text-amber-700 font-bold' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                     Theo thu nhập
+                  </button>
+                  <button 
+                     onClick={() => handleUpdateContributionMode('equal')}
+                     className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors ${contributionMode === 'equal' ? 'bg-white shadow-sm text-amber-700 font-bold' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                     Chia đều
+                  </button>
+                  <button 
+                     onClick={() => handleUpdateContributionMode('custom')}
+                     className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-colors ${contributionMode === 'custom' ? 'bg-white shadow-sm text-amber-700 font-bold' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                     Tùy chỉnh (%)
+                  </button>
+               </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4">
               {memberList.map((m) => (
                 <div key={m.uid} className="bg-white border border-amber-200 rounded-xl p-4 flex flex-col justify-between">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-2">{m.displayName} {m.role === 'owner' ? '(Trưởng nhóm)' : ''}</label>
-                    {m.uid === user.uid ? (
-                      <input 
-                        type="number"
-                        placeholder="Nhập thu nhập của bạn..."
-                        value={myIncomeSync}
-                        onChange={(e) => setMyIncomeSync(e.target.value)}
-                        onBlur={(e) => handleUpdateIncome(e.target.value)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono font-medium"
-                      />
-                    ) : (
-                      <div className="text-lg font-mono font-bold text-neutral-900">{Number(m.income).toLocaleString()}đ</div>
-                    )}
-                  </div>
+                  {contributionMode === 'custom' ? (
+                     <div className="flex-1 flex gap-4">
+                        <div className="flex-1">
+                           <label className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-2">{m.displayName}</label>
+                           {m.uid === user.uid ? (
+                              <input 
+                              type="number"
+                              placeholder="Nhập thu nhập..."
+                              value={myIncomeSync}
+                              onChange={(e) => setMyIncomeSync(e.target.value)}
+                              onBlur={(e) => handleUpdateIncome(e.target.value)}
+                              className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono font-medium"
+                              />
+                           ) : (
+                              <div className="text-lg font-mono font-bold text-neutral-900 mt-2">{Number(m.income).toLocaleString()}đ</div>
+                           )}
+                        </div>
+                        <div className="w-24 border-l pl-4 border-amber-100">
+                           <label className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-2">Tỷ lệ %</label>
+                           {sharedFundDoc?.ownerId === user.uid ? (
+                              <div className="relative">
+                                 <input 
+                                    type="number"
+                                    defaultValue={m.customRatio}
+                                    onBlur={(e) => handleUpdateCustomRatio(m.uid, e.target.value)}
+                                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-3 pr-6 text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono font-medium"
+                                 />
+                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 font-mono text-sm">%</span>
+                              </div>
+                           ) : (
+                              <div className="text-lg font-mono font-bold text-neutral-900 mt-2">{m.customRatio}%</div>
+                           )}
+                        </div>
+                     </div>
+                  ) : (
+                    <div className="flex-1">
+                      <label className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-2">{m.displayName} {m.role === 'owner' ? '(Trưởng nhóm)' : ''}</label>
+                      {m.uid === user.uid ? (
+                        <>
+                        <input 
+                          type="number"
+                          placeholder="Nhập thu nhập của bạn..."
+                          value={myIncomeSync}
+                          onChange={(e) => setMyIncomeSync(e.target.value)}
+                          onBlur={(e) => handleUpdateIncome(e.target.value)}
+                          className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono font-medium"
+                        />
+                        <button 
+                          onClick={async () => {
+                            if (!user) return;
+                            const q = query(collection(db, 'transactions'), where('userId', '==', user.uid), where('type', '==', 'income'));
+                            const snap = await getDocs(q);
+                            const totalIncome = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
+                            handleUpdateIncome(totalIncome.toString());
+                          }}
+                          className="text-xs font-semibold text-amber-700 hover:text-amber-900 mt-2 block w-full text-center"
+                        >
+                          ↻ Cập nhật từ giao dịch của mình
+                        </button>
+                        </>
+                      ) : (
+                        <div className="text-lg font-mono font-bold text-neutral-900">{Number(m.income).toLocaleString()}đ</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -401,7 +515,20 @@ export default function SharedFund({ user }: SharedFundProps) {
                     <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3">Tỷ trọng đóng góp các nguồn</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {memberList.map(m => {
-                        const ratio = totalIncome > 0 ? (m.income || 0) / totalIncome : 1 / memberList.length;
+                        let ratio = 0;
+                        if (contributionMode === 'custom') {
+                          ratio = (m.customRatio || 0) / 100;
+                        } else if (contributionMode === 'equal') {
+                          ratio = 1 / memberList.length;
+                        } else {
+                          ratio = totalIncome > 0 ? (m.income || 0) / totalIncome : 1 / memberList.length;
+                        }
+                        
+                        // Normalize ratio if totalcustom != 100
+                        if (contributionMode === 'custom' && totalCustomRatio > 0 && totalCustomRatio !== 100) {
+                           ratio = (m.customRatio || 0) / totalCustomRatio;
+                        }
+
                         const propShare = parsedSharedTotal * ratio;
                         return (
                           <div key={m.uid} className="bg-amber-50 rounded-xl p-3">

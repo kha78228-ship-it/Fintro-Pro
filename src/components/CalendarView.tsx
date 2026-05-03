@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, TransactionType } from '../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek, differenceInDays, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Trash2, Heart, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Trash2, Heart, Check, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { motion } from 'motion/react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -234,6 +234,13 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
                   </span>
                   
                   {dayData && (
+                    <div className="flex gap-1 mb-1 justify-center">
+                      {dayData.income > 0 && <ArrowUp className="w-3 h-3 text-emerald-600 bg-emerald-100 rounded-sm p-0.5" />}
+                      {dayData.expense > 0 && <ArrowDown className="w-3 h-3 text-rose-600 bg-rose-100 rounded-sm p-0.5" />}
+                    </div>
+                  )}
+                  
+                  {dayData && (
                     <div className="mt-1 sm:mt-2 w-full space-y-0.5 sm:space-y-1">
                       {dayData.income > 0 && (
                         <div className={`text-[9px] sm:text-[10px] font-bold truncate text-center rounded px-1 py-0.5 ${isSelected && (isSelectionStart || isSelectionEnd) ? 'bg-indigo-800/50 text-indigo-100 border border-indigo-500/30' : 'bg-emerald-100 text-emerald-700'}`}>
@@ -282,22 +289,33 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
           transition={{ delay: 0.1 }}
           className="card p-6 sm:p-8 flex flex-col gap-4"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-              <CalendarIcon className="w-5 h-5" />
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                <CalendarIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-neutral-900">
+                  {!selection 
+                    ? 'Chọn ngày' 
+                    : isSameDay(selection.start, selection.end)
+                      ? format(selection.start, 'dd/MM/yyyy')
+                      : `${format(selection.start, 'dd/MM')} - ${format(selection.end, 'dd/MM/yyyy')} 
+                        (${differenceInDays(selection.end, selection.start) + 1} ngày)`
+                  }
+                </h3>
+                <p className="text-xs font-semibold text-neutral-400">Giao dịch</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-neutral-900">
-                {!selection 
-                  ? 'Chọn ngày' 
-                  : isSameDay(selection.start, selection.end)
-                    ? format(selection.start, 'dd/MM/yyyy')
-                    : `${format(selection.start, 'dd/MM')} - ${format(selection.end, 'dd/MM/yyyy')} 
-                      (${differenceInDays(selection.end, selection.start) + 1} ngày)`
-                }
-              </h3>
-              <p className="text-xs font-semibold text-neutral-400">Chi tiết khoảng thời gian</p>
-            </div>
+            {selection && (
+              <button 
+                onClick={() => setSelection(null)}
+                className="p-2 text-neutral-400 hover:bg-neutral-100 rounded-lg transition-colors"
+                title="Đóng chi tiết"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
           {selectedDateWarnings.length > 0 && (
@@ -355,16 +373,16 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
                 const [d1,m1,y1] = a[0].split('/');
                 const [d2,m2,y2] = b[0].split('/');
                 return new Date(`${y2}-${m2}-${d2}`).getTime() - new Date(`${y1}-${m1}-${d1}`).getTime();
-              }).map(([dateStr, data]) => (
+              }).map(([dateStr, data]: [string, any]) => (
                 <div key={dateStr} className="space-y-2">
                   <div className="flex justify-between items-center bg-indigo-50/50 px-3 py-1.5 rounded-lg border border-indigo-100/50">
                     <span className="text-xs font-bold text-indigo-900">{dateStr}</span>
                     <div className="flex gap-2 text-[10px] font-bold">
-                      {data.income > 0 && <span className="text-emerald-600">Thu: +{data.income.toLocaleString()}đ</span>}
-                      {data.expense > 0 && <span className="text-rose-600">Chi: -{data.expense.toLocaleString()}đ</span>}
+                      {data.income > 0 && <span className="text-emerald-600">Thu: +{(data as any).income.toLocaleString()}đ</span>}
+                      {data.expense > 0 && <span className="text-rose-600">Chi: -{(data as any).expense.toLocaleString()}đ</span>}
                     </div>
                   </div>
-                  {data.transactions.map(t => (
+                  {data.transactions.map((t: any) => (
                     <div key={t.id} className="group flex justify-between items-center p-3 sm:p-4 bg-neutral-50 hover:bg-neutral-100 border border-transparent hover:border-neutral-200 rounded-2xl transition-colors">
                       <div className="flex flex-col gap-1">
                         <span className="font-bold text-neutral-900 text-sm truncate max-w-[140px] sm:max-w-[150px]">{t.description || 'Giao dịch'}</span>
@@ -373,7 +391,7 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
                         </span>
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <span className={`font-mono font-bold text-xs sm:text-sm ${t.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-neutral-900'}`}>
+                        <span className={`font-mono font-bold text-xs sm:text-sm ${t.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-red-500'}`}>
                           {t.type === TransactionType.INCOME ? '+' : '-'}{t.amount.toLocaleString()}đ
                         </span>
                         {onDelete && (

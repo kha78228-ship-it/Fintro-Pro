@@ -74,9 +74,25 @@
         "funds": { "type": "array" }
       },
       "required": ["ownerId", "memberIds", "members", "funds"]
+    },
+    "CoupleData": {
+      "title": "Couple Data",
+      "description": "Shared data between couples (games, daily questions)",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "answers": { "type": "object" },
+        "scores": { "type": "object" },
+        "questions": { "type": "array" },
+        "authorId": { "type": "string" }
+      }
     }
   },
   "firestore": {
+    "/couple_data/{dataId}": {
+       "schema": "CoupleData",
+       "description": "Couple specific shared data like games or questions"
+    },
     "/shared_funds/{fundId}": {
       "schema": "SharedFund",
       "description": "Shared family fund"

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X, Send, Sparkles, Loader2, BrainCircuit } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Loader2, BrainCircuit, Trash2 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { Transaction } from '../types';
 
 interface Message {
   id: string;
@@ -9,18 +10,59 @@ interface Message {
   content: string;
 }
 
-export default function AiChatWidget() {
+interface AiChatWidgetProps {
+  transactions?: Transaction[];
+  appMode?: 'finance' | 'love';
+  user?: any;
+}
+
+export default function AiChatWidget({ transactions = [], appMode = 'finance', user }: AiChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: 'Chào bạn! Mình là Cố vấn AI. Mình có thể giúp bạn phân tích chi tiêu hoặc giải đáp các thắc mắc về dữ liệu tài chính. Bạn cần mình giúp gì?'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history from localStorage on mount
+  useEffect(() => {
+    const defaultMessage: Message = {
+      id: 'welcome',
+      role: 'assistant',
+      content: 'Chào bạn! Mình là Cố vấn AI Fintro. Lịch sử trò chuyện của bạn đã được ghi nhớ. Bạn muốn hỏi thêm gì nào?'
+    };
+    
+    if (user?.uid) {
+      const stored = localStorage.getItem(`ai_chat_history_${appMode}_${user.uid}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.length > 0) {
+            setMessages(parsed);
+            return;
+          }
+        } catch (e) {}
+      }
+    }
+    setMessages([defaultMessage]);
+  }, [user?.uid, appMode]);
+
+  // Save chat history to localStorage
+  useEffect(() => {
+    if (user?.uid && messages.length > 0) {
+      localStorage.setItem(`ai_chat_history_${appMode}_${user.uid}`, JSON.stringify(messages));
+    }
+  }, [messages, user?.uid, appMode]);
+
+  const clearHistory = () => {
+    if (user?.uid) {
+      localStorage.removeItem(`ai_chat_history_${appMode}_${user.uid}`);
+    }
+    setMessages([{
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: 'Lịch sử trò chuyện đã được xóa. Chúng ta bắt đầu lại nhé! Bạn cần mình giúp gì?'
+    }]);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,26 +83,32 @@ export default function AiChatWidget() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
       
-      const conversationHistory = messages.map(m => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`).join('\n');
+      const conversationHistory = messages.slice(-20).map(m => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`).join('\n');
 
-      const prompt = `Bạn là một người bạn tâm giao và trợ lý cá nhân thông minh tên là "Fintro AI".
+      const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+      const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+      const prompt = `Bạn là "Fintro AI", một cố vấn tài chính và người bạn tâm giao ấm áp, thông minh, tinh tế.
       
-      Lịch sử trò chuyện để bạn ghi nhớ bối cảnh:
+      Thông tin người dùng:
+      - Tên: ${user?.displayName || 'Người dùng'}
+      - Chế độ ứng dụng hiện tại: ${appMode === 'finance' ? 'Tài chính cá nhân' : 'Khoảng không gian cặp đôi (về tình cảm, quỹ chung)'}
+      - Tổng thu nhập đã ghi nhận: ${totalIncome.toLocaleString()}đ
+      - Tổng chi tiêu đã ghi nhận: ${totalExpense.toLocaleString()}đ
+      - Số lượng giao dịch: ${transactions.length}
+      
+      Lịch sử trò chuyện gần nhất:
       ${conversationHistory}
       
-      Người dùng vừa hỏi: "${userMessage.content}"
+      Người dùng nói: "${userMessage.content}"
       
-      Yêu cầu:
-      - Nếu người dùng hỏi các định nghĩa, kiến thức hoặc tư vấn về các chủ đề sau đây, hãy trả lời chi tiết, đáng tin cậy, chân thành, thấu hiểu tâm lý và dùng ngôn từ thân thiện, trendy (Gen Z) nhưng luôn tinh tế, duyên dáng và tôn trọng:
-        1. Tài chính: đầu tư, quỹ chung, tiết kiệm, lạm phát, quản lý chi tiêu cặp đôi...
-        2. Tình yêu & Mối quan hệ: cách quan tâm người ấy, giải quyết mâu thuẫn, tâm lý học tình yêu, thấu hiểu đối phương...
-        3. Các ngày lễ quan trọng (Holidays): gợi ý quà tặng, lời chúc ý nghĩa, cách lên kế hoạch và tổ chức những ngày lễ như Valentine, Quốc tế Phụ nữ 8/3, Phụ nữ VN 20/10, Giáng sinh, sinh nhật, kỷ niệm ngày quen/cưới...
-        4. An toàn trong tình yêu & Mối quan hệ lành mạnh: bao gồm an toàn tình dục/sức khỏe sinh sản, cách nhận biết dấu hiệu độc hại (red flags, gaslighting, thao túng tâm lý, bạo lực), cách bảo vệ bản thân, thiết lập ranh giới an toàn, và xây dựng một mối quan hệ bình đẳng, lành mạnh.
-        5. Sức khỏe Phụ nữ / Sinh lý: chu kỳ kinh nguyệt, cách chăm sóc bản thân, chế độ ăn uống, hiểu biết về cơ thể.
-      - Nếu người dùng hỏi các câu hỏi xã giao chung chung (xin chào, khỏe không, bạn là ai...), hãy trả lời thân thiện, vui vẻ.
-      - Nếu người dùng cần tóm tắt/phân tích chi tiêu (ví dụ: tháng này tiêu bao nhiêu, ăn uống hết bao nhiêu...), hãy tính toán dựa trên dữ liệu cung cấp để đưa ra phân tích chân thực, số liệu trực quan.
-      - Trả lời bằng tiếng Việt, ngôn từ tự nhiên, ngắn gọn, súc tích, đi thẳng vào trọng tâm.
-      - Sử dụng emoji vừa phải, dễ mến.`;
+      Hướng dẫn TRẢ LỜI NGHIÊM NGẶT:
+      - Trả lời TRỰC TIẾP, tập trung vào điều người dùng vừa hỏi.
+      - Nếu người dùng hỏi số dư, chi tiêu, hãy dùng thông tin cung cấp ở trên để trả lời.
+      - Câu trả lời phải súc tích, RẤT DỄ ĐỌC (dùng đoạn ngắn, bullet point nếu cần).
+      - Ngôn ngữ: TIẾNG VIỆT, ấm áp thấu cảm, dùng các emoji phổ biến nhẹ nhàng. 
+      - Nếu ở chế độ 'cặp đôi', lời khuyên tài chính phải hướng đến sự đồng thuận, thấu hiểu lẫn nhau.
+      - Tuyệt đối không xưng là AI một cách máy móc, hãy trò chuyện tự nhiên như một người bạn thực thụ.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
@@ -79,7 +127,7 @@ export default function AiChatWidget() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Oops! Có lỗi kết nối với bộ não AI. Bạn thử lại sau nhé."
+        content: "Oops! Có lỗi kết nối với trung tâm AI. Bạn thử lại sau nhé."
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -121,12 +169,21 @@ export default function AiChatWidget() {
                   <p className="text-[10px] text-indigo-200 uppercase tracking-widest font-semibold mt-0.5">Powered by Gemini</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all relative z-10"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1 relative z-10">
+                <button 
+                  onClick={clearHistory}
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                  title="Xóa lịch sử trò chuyện"
+                >
+                  <Trash2 className="w-5 h-5 text-indigo-50" />
+                </button>
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}

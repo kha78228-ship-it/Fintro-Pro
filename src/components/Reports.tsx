@@ -11,15 +11,21 @@ import { FileText, Calendar as CalendarIcon, TrendingUp, TrendingDown, LayoutGri
 
 interface ReportsProps {
   transactions: Transaction[];
+  chartPalette?: string;
 }
 
 type ReportView = 'monthly' | 'yearly';
 
-export default function Reports({ transactions }: ReportsProps) {
+export default function Reports({ transactions, chartPalette = 'default' }: ReportsProps) {
   const [view, setView] = useState<ReportView>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [breakdownType, setBreakdownType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Customization state
+  const [activePalette, setActivePalette] = useState(chartPalette || 'default');
+  const [overviewChartType, setOverviewChartType] = useState<'bar' | 'area'>('bar');
+  
   const reportRef = useRef<HTMLDivElement>(null);
 
   const handleExportPDF = async () => {
@@ -159,7 +165,17 @@ export default function Reports({ transactions }: ReportsProps) {
 
   const displayCategoryData = breakdownType === TransactionType.EXPENSE ? expenseCategoryData : incomeCategoryData;
   const currentTotal = displayCategoryData.reduce((acc, curr) => acc + curr.value, 0);
-  const COLORS = ['#171717', '#404040', '#737373', '#a3a3a3', '#d4d4d4', '#e5e5e5'];
+  const paletteColors = useMemo(() => {
+    switch (activePalette) {
+      case 'ocean': return { expense: '#0ea5e9', income: '#10b981', savings: '#3b82f6', pie: ['#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#e0f2fe', '#0284c7'] };
+      case 'sunset': return { expense: '#f43f5e', income: '#f59e0b', savings: '#e11d48', pie: ['#f43f5e', '#fb7185', '#fda4af', '#fecdd3', '#ffe4e6', '#e11d48'] };
+      case 'pastel': return { expense: '#fca5a5', income: '#86efac', savings: '#93c5fd', pie: ['#fca5a5', '#fecaca', '#fee2e2', '#fef2f2', '#fda4af', '#e11d48'] };
+      case 'monochrome': return { expense: '#525252', income: '#a3a3a3', savings: '#171717', pie: ['#171717', '#404040', '#737373', '#a3a3a3', '#d4d4d4', '#e5e5e5'] };
+      default: return { expense: '#171717', income: '#22c55e', savings: '#4f46e5', pie: ['#171717', '#404040', '#737373', '#a3a3a3', '#d4d4d4', '#e5e5e5'] };
+    }
+  }, [activePalette]);
+
+  const COLORS = paletteColors.pie;
 
   const currentData = view === 'monthly' ? monthlyData : yearlyData;
 
@@ -211,6 +227,20 @@ export default function Reports({ transactions }: ReportsProps) {
         </div>
         
         <div className="flex items-center gap-4">
+            {/* Customization controls */}
+            <select value={activePalette} onChange={(e) => setActivePalette(e.target.value)} className="bg-neutral-100 text-sm font-bold text-neutral-900 rounded-xl px-4 py-2 border-none outline-none">
+                <option value="default">Mặc định</option>
+                <option value="ocean">Đại dương</option>
+                <option value="sunset">Hoàng hôn</option>
+                <option value="pastel">Pastel</option>
+                <option value="monochrome">Đơn sắc</option>
+            </select>
+            <div className="flex bg-neutral-100 p-1 rounded-2xl">
+                <button onClick={() => setOverviewChartType('bar')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${overviewChartType === 'bar' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Cột</button>
+                <button onClick={() => setOverviewChartType('area')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${overviewChartType === 'area' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Vùng</button>
+            </div>
+            {/* End customization controls */}
+
           <button
             onClick={handleExportPDF}
             disabled={isExporting}
@@ -266,7 +296,7 @@ export default function Reports({ transactions }: ReportsProps) {
               </div>
               <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 relative z-10">Tổng Thu</p>
               <div className="flex items-center gap-2 relative z-10">
-                <span className="text-3xl font-display font-bold text-neutral-900">{totalIncome.toLocaleString()}đ</span>
+                <span className="text-3xl font-display font-bold text-green-600">+{totalIncome.toLocaleString()}đ</span>
               </div>
             </div>
             
@@ -276,7 +306,7 @@ export default function Reports({ transactions }: ReportsProps) {
               </div>
               <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 relative z-10">Tổng Chi</p>
               <div className="flex items-center gap-2 relative z-10">
-                <span className="text-3xl font-display font-bold text-neutral-900">{totalExpense.toLocaleString()}đ</span>
+                <span className="text-3xl font-display font-bold text-red-500">-{totalExpense.toLocaleString()}đ</span>
               </div>
             </div>
 
@@ -296,7 +326,8 @@ export default function Reports({ transactions }: ReportsProps) {
             
             <div className="h-80 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={currentData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            {overviewChartType === 'bar' ? (
+              <BarChart data={currentData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="#F5F5F5" />
                   <XAxis 
                     dataKey={view === 'monthly' ? 'monthName' : 'year'} 
@@ -310,24 +341,44 @@ export default function Reports({ transactions }: ReportsProps) {
                     cursor={{ fill: '#F5F5F5' }}
                     content={<CustomTooltip />}
                   />
-                  <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
-                  <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
-                  <Bar dataKey="savings" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
+                  <Bar dataKey="income" fill={paletteColors.income} radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
+                  <Bar dataKey="expense" fill={paletteColors.expense} radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
+                  <Bar dataKey="savings" fill={paletteColors.savings} radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
                 </BarChart>
+            ) : (
+                <AreaChart data={currentData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke="#F5F5F5" />
+                  <XAxis 
+                    dataKey={view === 'monthly' ? 'monthName' : 'year'} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fontSize: 12, fill: '#A3A3A3', fontWeight: 600}} 
+                    dy={15}
+                  />
+                  <YAxis hide />
+                  <Tooltip 
+                    cursor={{ fill: '#F5F5F5' }}
+                    content={<CustomTooltip />}
+                  />
+                  <Area type="monotone" dataKey="income" stroke={paletteColors.income} fill={paletteColors.income} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="expense" stroke={paletteColors.expense} fill={paletteColors.expense} fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="savings" stroke={paletteColors.savings} fill={paletteColors.savings} fillOpacity={0.3} />
+                </AreaChart>
+            )}
               </ResponsiveContainer>
             </div>
             
             <div className="flex justify-center gap-8 mt-6">
                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: paletteColors.income }} />
                   <span className="text-xs font-bold text-neutral-400">Tổng Thu</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: paletteColors.expense }} />
                   <span className="text-xs font-bold text-neutral-400">Tổng Chi</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-indigo-600" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: paletteColors.savings }} />
                   <span className="text-xs font-bold text-neutral-400">Tiền Tích Lũy</span>
                </div>
             </div>
@@ -342,12 +393,12 @@ export default function Reports({ transactions }: ReportsProps) {
                 <AreaChart data={dailyTrendData}>
                   <defs>
                     <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#171717" stopOpacity={0.08}/>
-                      <stop offset="95%" stopColor="#171717" stopOpacity={0}/>
+                      <stop offset="5%" stopColor={paletteColors.expense} stopOpacity={0.08}/>
+                      <stop offset="95%" stopColor={paletteColors.expense} stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.08}/>
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                      <stop offset="5%" stopColor={paletteColors.income} stopOpacity={0.08}/>
+                      <stop offset="95%" stopColor={paletteColors.income} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} stroke="#F5F5F5" />
@@ -366,7 +417,7 @@ export default function Reports({ transactions }: ReportsProps) {
                     type="monotone" 
                     dataKey="income" 
                     name="Thu nhập"
-                    stroke="#22c55e" 
+                    stroke={paletteColors.income} 
                     strokeWidth={3}
                     fillOpacity={1} 
                     fill="url(#colorIncome)" 
@@ -376,7 +427,7 @@ export default function Reports({ transactions }: ReportsProps) {
                     type="monotone" 
                     dataKey="expense" 
                     name="Chi tiêu"
-                    stroke="#171717" 
+                    stroke={paletteColors.expense} 
                     strokeWidth={4}
                     fillOpacity={1} 
                     fill="url(#colorExpense)" 
@@ -387,11 +438,11 @@ export default function Reports({ transactions }: ReportsProps) {
             </div>
             <div className="flex justify-center gap-6 mt-6">
                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: paletteColors.income }} />
                   <span className="text-xs font-bold text-neutral-400">Thu nhập</span>
                </div>
                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-neutral-900" />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: paletteColors.expense }} />
                   <span className="text-xs font-bold text-neutral-400">Chi tiêu</span>
                </div>
             </div>

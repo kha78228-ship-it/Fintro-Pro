@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { auth, signInWithGoogle, db } from './lib/firebase';
-import { collection, query, onSnapshot, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { auth, db } from './lib/firebase';
+import { collection, query, onSnapshot, deleteDoc, doc, orderBy, where, getDoc, setDoc, runTransaction, increment } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from './lib/firestoreUtils';
 import { Transaction } from './types';
 
@@ -13,6 +13,7 @@ import DiscoveryDeck from './components/DiscoveryDeck';
 import DateIdeas from './components/DateIdeas';
 import ForgetMeNots from './components/ForgetMeNots';
 import CycleTracker from './components/CycleTracker';
+import Onboarding from './components/Onboarding';
 
 // Finance Components
 import Dashboard from './components/Dashboard';
@@ -25,29 +26,44 @@ import Reports from './components/Reports';
 import Tools from './components/Tools';
 import SettingsView from './components/SettingsView';
 import AiChatWidget from './components/AiChatWidget';
+import FriendsView from './components/FriendsView';
+import AIAvatar from './components/AIAvatar';
+import VideoCall from './components/VideoCall';
+
+import SocialFeed from './components/SocialFeed';
 
 import { 
-  Heart, User as UserIcon, LogOut, MessageCircleQuestion, Gamepad2, 
+  Heart, User as UserIcon, MessageCircleQuestion, Gamepad2, 
   BookOpen, Layers, Map, Bookmark, Settings, CalendarHeart,
-  LayoutDashboard, CalendarRange, Target, Users, PieChart, Wrench, Plus, List, Bell, Wallet, FileText, Search, WifiOff
+  LayoutDashboard, CalendarRange, Target, Users, PieChart, Wrench, Plus, List, Bell, Wallet, FileText, Search, WifiOff, AlertCircle, MessageCircle, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type View = 'dashboard' | 'calendar' | 'history' | 'planning' | 'shared_fund' | 'reports' | 'tools' | 'daily_question' | 'couple_games' | 'exercises' | 'discovery' | 'dates' | 'forget_me_nots' | 'cycle' | 'settings';
+type View = 'dashboard' | 'calendar' | 'history' | 'planning' | 'shared_fund' | 'reports' | 'tools' | 'daily_question' | 'couple_games' | 'exercises' | 'discovery' | 'dates' | 'forget_me_nots' | 'cycle' | 'settings' | 'social_feed';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [appMode, setAppMode] = useState<'finance' | 'love'>('finance');
+  const [showFriends, setShowFriends] = useState(false);
+  const [appMode, setAppMode] = useState<'finance' | 'love' | 'entertainment'>('finance');
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
   const [backgroundImage, setBackgroundImage] = useState(() => localStorage.getItem('__couple_bg') || '');
   const [fontFamily, setFontFamily] = useState(() => localStorage.getItem('__couple_font') || 'Inter');
   const [textColor, setTextColor] = useState(() => localStorage.getItem('__couple_color') || '#1a1a1a');
+  const [chartPalette, setChartPalette] = useState(() => localStorage.getItem('__couple_chart_palette') || 'default');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => localStorage.getItem('__has_seen_onboarding') === 'true');
   
+  const [profileVerified, setProfileVerified] = useState(false);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [isVerifyingInvite, setIsVerifyingInvite] = useState(false);
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -69,23 +85,119 @@ export default function App() {
     (t.categoryObj?.name || t.category).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [activeCall, setActiveCall] = useState<{ friendId: string, isIncoming: boolean, isVideo?: boolean } | null>(null);
+  const [appToast, setAppToast] = useState<{title: string, body: string, type?: 'info' | 'error'} | null>(null);
 
-  const handleAppModeChange = (mode: 'finance' | 'love') => {
+  // Global error listener to catch Firestore errors
+  useEffect(() => {
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const errorMsg = event.reason?.message || String(event.reason);
+      if (errorMsg.includes('[System_Diagnostic_Info]')) {
+        const userMessage = errorMsg.split('\n\n[System_Diagnostic_Info]')[0];
+        setAppToast({ title: 'Lỗi Thao Tác', body: userMessage, type: 'error' });
+        setTimeout(() => setAppToast(null), 5000);
+      }
+    };
+    
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => window.removeEventListener('unhandledrejection', handleRejection);
+  }, []);
+
+  // Request notification permissions
+  useEffect(() => {
+    if (user && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(console.error);
+    }
+  }, [user]);
+
+  // Income messages listener
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', user.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'modified' || change.type === 'added') {
+          const chatData = change.doc.data();
+          if (chatData.lastMessage && chatData.lastSenderId && chatData.lastSenderId !== user.uid) {
+            // Check if it's a new message (within last 5 seconds to avoid old notifications on load)
+            const isRecent = chatData.updatedAt?.toMillis ? (Date.now() - chatData.updatedAt.toMillis() < 5000) : false;
+            
+            if (isRecent && !showFriends) {
+              const title = 'Tin nhắn mới từ bạn bè! 💬';
+              const body = chatData.lastMessage.substring(0, 50) + (chatData.lastMessage.length > 50 ? '...' : '');
+
+              if ('Notification' in window && Notification.permission === 'granted') {
+                // Show notification
+                // Check if document is hidden or showFriends is false
+                if (document.hidden) {
+                  const notification = new Notification(title, { body, icon: '/icon.png' });
+                  notification.onclick = () => {
+                    window.focus();
+                    setShowFriends(true); // Open friends view when clicked
+                    notification.close();
+                  };
+                }
+              }
+              
+              // In-app toast
+              setAppToast({ title, body });
+              setTimeout(() => setAppToast(null), 4000);
+            }
+          }
+        }
+      });
+    });
+    return () => unsubscribe();
+  }, [user, showFriends]);
+  // Incoming call listener
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'calls'),
+      where('targetId', '==', user.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const callData = change.doc.data();
+          // If we receive a call and we're not currently in one
+          if (callData.offer && callData.callerId !== user.uid) {
+            setActiveCall(prev => {
+              // If already active, do nothing
+              if (prev && prev.friendId === callData.callerId && prev.isIncoming) return prev;
+              
+              // New call, trigger browser notification
+              if ('Notification' in window && Notification.permission === 'granted') {
+                // Only notify if document is not visible
+                if (document.hidden) {
+                  const notification = new Notification('Bạn có một cuộc gọi đến! 📞', {
+                    body: `Cuộc gọi video từ The Love App`,
+                    requireInteraction: true 
+                  });
+                  notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                  };
+                }
+              }
+              
+              return { friendId: callData.callerId, isIncoming: true };
+            });
+          }
+        }
+      });
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleAppModeChange = (mode: 'finance' | 'love' | 'entertainment') => {
     setAppMode(mode);
     if (mode === 'finance') setCurrentView('dashboard');
-    else setCurrentView('daily_question');
-  };
-
-  const handleLogin = async () => {
-    try {
-      setIsLoggingIn(true);
-      await signInWithGoogle();
-    } catch (error) {
-      console.error("Login failed", error);
-    } finally {
-      setIsLoggingIn(false);
-    }
+    else if (mode === 'love') setCurrentView('daily_question');
+    else setCurrentView('social_feed');
   };
 
   const updateBackground = (url: string) => {
@@ -103,6 +215,24 @@ export default function App() {
     localStorage.setItem('__couple_color', color);
   };
 
+  const updateChartPalette = (palette: string) => {
+    setChartPalette(palette);
+    localStorage.setItem('__couple_chart_palette', palette);
+  };
+
+  useEffect(() => {
+    if (!user) {
+      setUserProfile(null);
+      return;
+    }
+    const unsub = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        setUserProfile(docSnap.data());
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
   useEffect(() => {
     const savedBg = localStorage.getItem('__couple_bg');
     if (savedBg) setBackgroundImage(savedBg);
@@ -115,12 +245,245 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      setLoading(false);
+      
+      if (u) {
+        setIsCheckingProfile(true);
+        try {
+          const profileRef = doc(db, 'users', u.uid);
+          const { getDoc, setDoc, serverTimestamp } = await import('firebase/firestore');
+          const snap = await getDoc(profileRef);
+          
+          if (snap.exists()) {
+            setProfileVerified(true);
+            await setDoc(profileRef, { status: 'online', lastSeen: serverTimestamp() }, { merge: true });
+          } else {
+             // For Admin or Anonymous users, allow them through automatically
+             if (u.email?.toLowerCase() === 'kha78228@gmail.com' || u.isAnonymous) {
+               setProfileVerified(true);
+               const friendCode = Math.floor(100+Math.random()*900).toString(); // 3 digit code for anonymous
+               await setDoc(profileRef, {
+                   displayName: u.displayName || (u.isAnonymous ? 'Người Dùng Ẩn Danh' : 'Người dùng'),
+                   email: u.email || '',
+                   currency: 'VND',
+                   friendCode: friendCode,
+                   status: 'online',
+                   lastSeen: serverTimestamp()
+               });
+               await setDoc(doc(db, 'publicProfiles', u.uid), {
+                   displayName: u.displayName || (u.isAnonymous ? 'Người Dùng Ẩn Danh' : 'Người dùng'),
+                   friendCode: friendCode,
+                   status: 'online'
+               }, { merge: true });
+             } else {
+               // Require invite code
+               setProfileVerified(false);
+             }
+          }
+        } catch (error) {
+          console.error("Lỗi kiểm tra profile:", error);
+        } finally {
+          setIsCheckingProfile(false);
+          setLoading(false);
+        }
+      } else {
+        if (user) {
+          const profileRef = doc(db, 'users', user.uid);
+          const { updateDoc, serverTimestamp } = await import('firebase/firestore');
+          updateDoc(profileRef, { status: 'offline', lastSeen: serverTimestamp() }).catch(console.error);
+        }
+        setProfileVerified(false);
+        setLoading(false);
+      }
     });
     return () => unsubscribe();
   }, []);
+
+  const handleVerifyInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !inviteCode.trim()) return;
+    
+    setIsVerifyingInvite(true);
+    setInviteError('');
+    
+    try {
+      const { doc, runTransaction, increment } = await import('firebase/firestore');
+      const codeRef = doc(db, 'invite_codes', inviteCode.trim().toUpperCase());
+      
+      await runTransaction(db, async (transaction) => {
+        const codeSnap = await transaction.get(codeRef);
+        
+        if (!codeSnap.exists()) {
+             throw new Error('NOT_FOUND');
+        }
+        
+        const codeData = codeSnap.data();
+        if (codeData.uses >= 10 && codeData.createdBy !== 'kha78228@gmail.com') {
+             throw new Error('LIMIT_EXCEEDED');
+        }
+        
+        const expiresAt = codeData.expiresAt || 0;
+        if (Date.now() > expiresAt && expiresAt > 0) {
+             throw new Error('EXPIRED');
+        }                
+        
+        transaction.update(codeRef, {
+            uses: increment(1)
+        });
+        
+        const profileRef = doc(db, 'users', user.uid);
+        const newFriendCode = Math.floor(100+Math.random()*900).toString(); // 3 số
+        transaction.set(profileRef, {
+            displayName: user.displayName || 'Người dùng',
+            email: user.email || '',
+            currency: 'VND',
+            friendCode: newFriendCode,
+            status: 'online'
+        });
+
+        const publicProfileRef = doc(db, 'publicProfiles', user.uid);
+        transaction.set(publicProfileRef, {
+            displayName: user.displayName || 'Người dùng',
+            friendCode: newFriendCode,
+            status: 'online'
+        }, { merge: true });
+      });
+      
+      setProfileVerified(true);
+      
+    } catch (error: any) {
+        if (error.message === 'NOT_FOUND') setInviteError('Mã mời không tồn tại hoặc không hợp lệ.');
+        else if (error.message === 'LIMIT_EXCEEDED') setInviteError('Mã mời đã đạt giới hạn lượt sử dụng.');
+        else if (error.message === 'EXPIRED') setInviteError('Mã mời đã hết hạn.');
+        else {                
+            console.error(error);
+            setInviteError('Có lỗi xảy ra, vui lòng thử lại.');
+        }
+    } finally {
+      setIsVerifyingInvite(false);
+    }
+  };
+
+  const handleConnectSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setInviteError('');
+    
+    try {
+      const { signInAnonymouslyUser } = await import('./lib/firebase');
+      const { doc, getDoc, setDoc, serverTimestamp } = await import('firebase/firestore');
+      
+      const codeToUse = inviteCode.trim();
+      let joinedCode = '';
+      let isJoining = false;
+      let creatorUid = '';
+
+      if (codeToUse) {
+        if (codeToUse.length !== 3) {
+          setInviteError('Vui lòng nhập đúng mã ẩn danh (3 số).');
+          setIsLoggingIn(false);
+          return;
+        }
+
+        // Checking existing code
+        const codeRef = doc(db, 'invite_codes', codeToUse);
+        const codeSnap = await getDoc(codeRef);
+        
+        if (!codeSnap.exists()) {
+          setInviteError('Mã tham gia không tồn tại.');
+          setIsLoggingIn(false);
+          return;
+        }
+        
+        const data = codeSnap.data();
+        if (data.expiresAt < Date.now()) {
+          setInviteError('Mã tham gia đã hết hạn.');
+          setIsLoggingIn(false);
+          return;
+        }
+
+        if (data.type === 'anonymous') {
+            const limit = data.createdBy === 'kha78228@gmail.com' ? 1 : 2;
+            if (data.uses >= limit) {
+                setInviteError('Mã tham gia đã được sử dụng hết.');
+                setIsLoggingIn(false);
+                return;
+            }
+        }
+        
+        creatorUid = data.creatorUid;
+        joinedCode = codeToUse;
+        isJoining = true;
+      }
+
+      // Proceed with Anonymously Login (creates new uid if no session)
+      let userCred;
+      try {
+        userCred = await signInAnonymouslyUser();
+      } catch (err: any) {
+        if (err.code === 'auth/operation-not-allowed' || err.code === 'auth/admin-restricted-operation') {
+          throw new Error('Tính năng Ẩn danh chưa được bật. Vui lòng bật "Anonymous" trong Firebase Console > Authentication > Sign-in method.');
+        }
+        throw err;
+      }
+      const user = userCred.user;
+
+      // If no code provided, generate a new one
+      if (!isJoining) {
+        // ID 3 số bắt đầu từ 100
+        joinedCode = Math.floor(100 + Math.random() * 900).toString();
+        await setDoc(doc(db, 'invite_codes', joinedCode), {
+          creatorUid: user.uid,
+          createdAt: serverTimestamp(),
+          expiresAt: Date.now() + 24 * 3600 * 1000, // 24 hours expiry
+          uses: 1,
+          type: 'anonymous'
+        });
+      } else {
+        const { increment } = await import('firebase/firestore');
+        await setDoc(doc(db, 'invite_codes', codeToUse), { uses: increment(1) }, { merge: true });
+      }
+
+      // Create their profile and link them
+      const profileRef = doc(db, 'users', user.uid);
+      await setDoc(profileRef, {
+        displayName: 'Người Dùng Ẩn Danh',
+        currency: 'VND',
+        status: 'online',
+        friendCode: joinedCode, // Share the same code visually
+        lastSeen: serverTimestamp()
+      }, { merge: true });
+      
+      const publicProfileRef = doc(db, 'publicProfiles', user.uid);
+      await setDoc(publicProfileRef, {
+        displayName: 'Người Dùng Ẩn Danh',
+        friendCode: joinedCode,
+        status: 'online'
+      }, { merge: true });
+
+      // Automatically pair them if joining
+      if (isJoining && creatorUid && creatorUid !== user.uid) {
+        await setDoc(doc(db, `users/${user.uid}/friends/${creatorUid}`), {
+          friendId: creatorUid,
+          status: 'accepted',
+          createdAt: serverTimestamp()
+        });
+        await setDoc(doc(db, `users/${creatorUid}/friends/${user.uid}`), {
+          friendId: user.uid,
+          status: 'accepted',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setProfileVerified(true);
+    } catch (error: any) {
+      console.error(error);
+      setInviteError(error.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -196,6 +559,13 @@ export default function App() {
     }
   };
 
+  if (!hasSeenOnboarding) {
+    return <Onboarding onComplete={() => {
+      localStorage.setItem('__has_seen_onboarding', 'true');
+      setHasSeenOnboarding(true);
+    }} />;
+  }
+
   if (!isOnline) {
     return (
       <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -215,10 +585,63 @@ export default function App() {
     );
   }
 
-  if (loading) {
+  if (loading || (user && isCheckingProfile)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-pink-50">
-        <Heart className="w-12 h-12 text-pink-500 animate-pulse" />
+        <div className="flex flex-col items-center gap-4">
+          <Heart className="w-12 h-12 text-pink-500 animate-pulse" />
+          <span className="text-pink-400 font-medium font-mono text-sm">Đang tải...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !profileVerified) {
+    return (
+      <div className="min-h-screen bg-pink-50 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full opacity-50 pointer-events-none" />
+          <h2 className="text-2xl font-display font-medium text-neutral-900 mb-2 relative z-10">Nhập Mã Mời</h2>
+          <p className="text-neutral-500 mb-8 text-sm relative z-10 leading-relaxed">
+            Hệ thống đang trong giai đoạn thử nghiệm. Bạn cần mã mời của quản trị viên để tham gia bằng tài khoản Google.
+          </p>
+          <form onSubmit={handleVerifyInviteCode} className="space-y-4 relative z-10">
+            <div>
+               <input 
+                 type="text" 
+                 value={inviteCode}
+                 onChange={(e) => setInviteCode(e.target.value)}
+                 className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-center tracking-widest uppercase transition-all"
+                 placeholder="------"
+                 maxLength={6}
+                 required
+               />
+            </div>
+            {inviteError && <p className="text-red-500 text-sm mb-4 font-medium text-center">{inviteError}</p>}
+            
+            <button 
+               type="submit" 
+               disabled={isVerifyingInvite || inviteCode.length < 6}
+               className="w-full py-3.5 bg-neutral-900 font-bold text-white rounded-xl hover:bg-neutral-800 transition-colors shadow-lg shadow-neutral-900/20 disabled:opacity-50"
+            >
+               {isVerifyingInvite ? 'Đang xác thực...' : 'Xác thực & Tham gia'}
+            </button>
+
+            <div className="pt-4 border-t border-neutral-100 flex justify-center">
+              <button 
+                type="button"
+                onClick={() => { signOut(auth); setInviteCode(''); setInviteError(''); }}
+                className="text-xs font-semibold text-neutral-500 hover:text-neutral-900 transition-colors"
+              >
+                Trở lại Đăng nhập
+              </button>
+            </div>
+          </form>
+        </motion.div>
       </div>
     );
   }
@@ -260,38 +683,72 @@ export default function App() {
                </div>
             </div>
 
-            {/* Typography */}
+              {/* Typography */}
             <div className="text-center mb-12">
                <h1 className="text-4xl sm:text-5xl font-display font-medium text-neutral-900 mb-5 tracking-tight">
                  Fintro <span className="text-rose-500">✕</span> Couple
                </h1>
                <p className="text-neutral-500 text-lg leading-relaxed">
-                 Không gian riêng tư để vun đắp tình yêu và lên kế hoạch tài chính cùng nhau.
+                 Không gian ẩn danh để vun đắp tình yêu và tài chính.
                </p>
             </div>
             
-            {/* Login Button */}
+            {/* Login Flow */}
             <div className="space-y-4">
-               <button
-                 onClick={handleLogin}
+               {/* Nút Đăng nhập Google */}
+               <button 
+                 type="button"
+                 onClick={async () => {
+                   setIsLoggingIn(true);
+                   try {
+                      const { signInWithGoogle } = await import('./lib/firebase');
+                      await signInWithGoogle();
+                   } catch(err) {
+                      console.error(err);
+                   } finally {
+                      setIsLoggingIn(false);
+                   }
+                 }}
                  disabled={isLoggingIn}
-                 className="w-full bg-neutral-900 text-white font-bold flex items-center justify-center gap-3 py-4.5 rounded-2xl shadow-xl shadow-neutral-900/10 hover:bg-neutral-800 hover:shadow-2xl hover:shadow-neutral-900/20 hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+                 className="w-full bg-white text-neutral-800 font-bold flex items-center justify-center gap-3 py-4 rounded-xl shadow-md hover:bg-neutral-50 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed border border-neutral-200"
                >
-                 {isLoggingIn ? (
-                   <>
-                     <div className="w-5 h-5 border-2 border-neutral-300 border-t-white rounded-full animate-spin" />
-                     <span>Đang kết nối...</span>
-                   </>
-                 ) : (
-                   <>
-                     <div className="bg-white p-1 rounded-full flex items-center justify-center">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-[18px] h-[18px]" alt="Google" />
-                     </div>
-                     <span>Đăng nhập với Google</span>
-                   </>
-                 )}
+                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                 Đăng Nhập bằng Google
                </button>
-               <p className="text-xs text-center text-neutral-400 font-medium">Bằng việc đăng nhập, bạn đồng ý với Điều khoản sử dụng.</p>
+
+               <div className="relative flex items-center py-2">
+                 <div className="flex-grow border-t border-neutral-200"></div>
+                 <span className="flex-shrink-0 mx-4 text-xs font-medium text-neutral-400">hoặc Ẩn Danh</span>
+                 <div className="flex-grow border-t border-neutral-200"></div>
+               </div>
+
+               <form onSubmit={handleConnectSpace} className="space-y-4 relative z-10 bg-white/80 p-6 rounded-3xl backdrop-blur-sm border border-pink-100 shadow-xl">
+                 <div>
+                   <label className="block text-xs font-bold text-neutral-500 mb-2 uppercase tracking-wider text-center">Mã kết nối (3 số)</label>
+                   <input 
+                     type="text" 
+                     value={inviteCode}
+                     onChange={(e) => setInviteCode(e.target.value.replace(/[^0-9]/g, ''))}
+                     className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3 outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-500/10 font-mono text-center text-xl tracking-[0.5em] transition-all"
+                     placeholder="---"
+                     maxLength={3}
+                   />
+                 </div>
+                 {inviteError && <p className="text-red-500 text-sm font-medium text-center">{inviteError}</p>}
+                 
+                 <button
+                   type="submit"
+                   disabled={isLoggingIn}
+                   className="w-full bg-neutral-900 text-white font-bold flex items-center justify-center gap-3 py-4 rounded-xl shadow-xl hover:bg-neutral-800 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+                 >
+                   {isLoggingIn ? (
+                     <div className="w-5 h-5 border-2 border-neutral-300 border-t-white rounded-full animate-spin" />
+                   ) : (
+                     <span>{inviteCode.trim() ? 'Vào Không Gian' : 'Tạo Mã Ẩn Danh'}</span>
+                   )}
+                 </button>
+               </form>
+               <p className="text-xs text-center text-neutral-400 font-medium mt-4">Phiên ẩn danh tồn tại 24h và không lưu thông tin dài hạn.</p>
             </div>
           </motion.div>
         </div>
@@ -308,10 +765,10 @@ export default function App() {
         }
       `}</style>
       
-      {backgroundImage && <div className="fixed inset-0 bg-white/60 backdrop-blur-3xl z-0 pointer-events-none" />}
+      {backgroundImage && <div className="fixed inset-0 bg-white/70 backdrop-blur-md z-0 pointer-events-none" style={{ willChange: 'transform' }} />}
       
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-2xl border-b border-pink-100/50">
+      <header className="sticky top-0 z-30 bg-white/70 backdrop-blur-md border-b border-pink-100/50" style={{ willChange: 'transform' }}>
         <div className={`mx-auto px-6 h-20 flex items-center justify-between ${appMode === 'finance' ? 'max-w-7xl' : 'max-w-6xl'}`}>
           <div className="flex items-center gap-3">
             <div className="relative w-12 h-10 flex items-center justify-center">
@@ -325,29 +782,21 @@ export default function App() {
             <span className="font-display font-bold text-xl tracking-tight text-neutral-800 hidden sm:block">Fintro <span className="text-rose-500">✕</span> Couple</span>
           </div>
           
-          {appMode === 'finance' && (
-            <div className="hidden lg:flex flex-1 max-w-xs xl:max-w-sm mx-4">
-              <div className="relative w-full flex items-center shadow-sm">
-                <Search className="w-4 h-4 absolute left-3 text-neutral-400" />
-                <input 
-                  type="text"
-                  placeholder="Tìm kiếm giao dịch (vd: ăn uống)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white/70 backdrop-blur-md border border-neutral-200/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all font-medium placeholder:text-neutral-400"
-                />
-              </div>
-            </div>
-          )}
           
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
              {/* Mode Switcher Button */}
              <button 
-               onClick={() => handleAppModeChange(appMode === 'finance' ? 'love' : 'finance')}
+               onClick={() => {
+                 if (appMode === 'finance') handleAppModeChange('love');
+                 else if (appMode === 'love') handleAppModeChange('entertainment');
+                 else handleAppModeChange('finance');
+               }}
                className={`group flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl font-bold transition-all duration-300 shadow-sm border border-neutral-200/60 mr-1 sm:mr-2 overflow-hidden ${
                  appMode === 'finance' 
                  ? 'bg-neutral-900 text-white hover:bg-neutral-800' 
-                 : 'bg-rose-500 text-white hover:bg-rose-600'
+                 : appMode === 'love'
+                 ? 'bg-rose-500 text-white hover:bg-rose-600'
+                 : 'bg-violet-600 text-white hover:bg-violet-700'
                }`}
                title="Nhấn để chuyển đổi chế độ"
              >
@@ -356,10 +805,15 @@ export default function App() {
                    <Wallet className="w-[18px] h-[18px] sm:w-5 sm:h-5" /> 
                    <span className="hidden sm:inline">Tài chính</span>
                  </>
-               ) : (
+               ) : appMode === 'love' ? (
                  <>
                    <Heart className="w-[18px] h-[18px] sm:w-5 sm:h-5 fill-white" /> 
                    <span className="hidden sm:inline">Tình yêu</span>
+                 </>
+               ) : (
+                 <>
+                   <Sparkles className="w-[18px] h-[18px] sm:w-5 sm:h-5 fill-white" /> 
+                   <span className="hidden sm:inline">Giải trí</span>
                  </>
                )}
                <div className="w-px h-4 bg-white/30 hidden sm:block mx-0.5"></div>
@@ -371,49 +825,36 @@ export default function App() {
              <button 
                onClick={() => setCurrentView('calendar')}
                title={appMode === 'finance' ? "Lịch chi tiêu" : "Lịch Dâu"}
-               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'calendar' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : 'hover:text-rose-600'} hover:bg-neutral-100`}`}
+               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'calendar' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : appMode === 'love' ? 'bg-rose-100 text-rose-600' : 'bg-violet-100 text-violet-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : appMode === 'love' ? 'hover:text-rose-600' : 'hover:text-violet-600'} hover:bg-neutral-100`}`}
              >
                <CalendarRange className="w-5 h-5" />
              </button>
              <button 
-               onClick={() => setCurrentView('reports')}
-               title="Báo cáo"
-               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'reports' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : 'hover:text-rose-600'} hover:bg-neutral-100`}`}
-             >
-               <FileText className="w-5 h-5" />
-             </button>
-             <button 
                onClick={() => setCurrentView('history')}
                title="Lịch sử & Thông báo"
-               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'history' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : 'hover:text-rose-600'} hover:bg-neutral-100`}`}
+               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'history' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : appMode === 'love' ? 'bg-rose-100 text-rose-600' : 'bg-violet-100 text-violet-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : appMode === 'love' ? 'hover:text-rose-600' : 'hover:text-violet-600'} hover:bg-neutral-100`}`}
              >
                <Bell className="w-5 h-5" />
              </button>
              <button 
+               onClick={() => setShowFriends(!showFriends)}
+               title="Kết nối & Tin nhắn"
+               className={`p-2 sm:p-2.5 rounded-xl transition-all ${showFriends ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : appMode === 'love' ? 'bg-rose-100 text-rose-600' : 'bg-violet-100 text-violet-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : appMode === 'love' ? 'hover:text-rose-600' : 'hover:text-violet-600'} hover:bg-neutral-100`}`}
+             >
+               <Users className="w-5 h-5" />
+             </button>
+             <button 
                onClick={() => setCurrentView('settings')}
-               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'settings' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : 'hover:text-rose-600'} hover:bg-neutral-100`}`}
+               className={`p-2 sm:p-2.5 rounded-xl transition-all ${currentView === 'settings' ? (appMode === 'finance' ? 'bg-indigo-100 text-indigo-600' : appMode === 'love' ? 'bg-rose-100 text-rose-600' : 'bg-violet-100 text-violet-600') : `text-neutral-500 ${appMode === 'finance' ? 'hover:text-indigo-600' : appMode === 'love' ? 'hover:text-rose-600' : 'hover:text-violet-600'} hover:bg-neutral-100`}`}
                title="Cài đặt"
              >
                <Settings className="w-5 h-5" />
              </button>
 
             <div className="hidden sm:flex items-center gap-3 py-1.5 pl-1.5 pr-4 bg-white/60 rounded-full border border-pink-100 shadow-sm ml-2">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName || ''} className="w-8 h-8 rounded-full border border-neutral-100" />
-              ) : (
-                <div className="w-8 h-8 bg-neutral-200 rounded-full flex items-center justify-center">
-                  <UserIcon className="w-4 h-4 text-neutral-500" />
-                </div>
-              )}
+              <AIAvatar uid={user.uid} name={user.displayName} photoURL={user.photoURL} className="w-8 h-8 rounded-full border border-neutral-100" />
               <span className="text-sm font-bold text-neutral-700">{user.displayName}</span>
             </div>
-            <button 
-              onClick={() => setShowSignOutConfirm(true)}
-              className="p-2.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-              title="Đăng xuất"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </header>
@@ -448,12 +889,12 @@ export default function App() {
             )}
             {currentView === 'reports' && (
               <motion.div key="reports" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                  <Reports transactions={filteredTransactions} />
+                  <Reports transactions={filteredTransactions} chartPalette={chartPalette} />
               </motion.div>
             )}
             {currentView === 'tools' && (
               <motion.div key="tools" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                  <Tools setCurrentView={setCurrentView} />
+                  <Tools setCurrentView={setCurrentView} appMode={appMode} />
               </motion.div>
             )}
 
@@ -466,7 +907,7 @@ export default function App() {
 
             {currentView === 'couple_games' && (
               <motion.div key="couple_games" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <CoupleGames />
+                <CoupleGames user={user} />
               </motion.div>
             )}
 
@@ -490,7 +931,7 @@ export default function App() {
 
             {currentView === 'forget_me_nots' && (
               <motion.div key="forget_me_nots" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <ForgetMeNots />
+                <ForgetMeNots user={user} />
               </motion.div>
             )}
 
@@ -500,15 +941,24 @@ export default function App() {
               </motion.div>
             )}
 
+            {currentView === 'social_feed' && (
+              <motion.div key="social_feed" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                <SocialFeed user={user} userProfile={userProfile} />
+              </motion.div>
+            )}
+
             {currentView === 'settings' && (
               <motion.div key="settings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                 <SettingsView 
+                  user={user}
                   backgroundImage={backgroundImage} 
                   setBackgroundImage={updateBackground} 
                   fontFamily={fontFamily}
                   setFontFamily={updateFontFamily}
                   textColor={textColor}
                   setTextColor={updateTextColor}
+                  chartPalette={chartPalette}
+                  setChartPalette={updateChartPalette}
                   onDeleteData={handleDeleteAllData}
                   onDownloadData={handleDownloadData}
                 />
@@ -519,7 +969,7 @@ export default function App() {
 
       {/* Vertical Navigation Bar */}
       {appMode === 'love' && (
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-2xl border-t border-pink-100 pb-safe md:fixed md:top-28 md:bottom-auto md:left-6 md:right-auto md:w-20 md:rounded-3xl md:border md:border-pink-100 md:shadow-2xl md:pb-0">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-pink-100 pb-safe md:fixed md:top-28 md:bottom-auto md:left-6 md:right-auto md:w-20 md:rounded-3xl md:border md:border-pink-100 md:shadow-2xl md:pb-0" style={{ willChange: 'transform' }}>
         <div className="flex md:flex-col items-center justify-between md:justify-start px-2 py-2 md:py-6 gap-2 md:gap-6 w-full h-full overflow-x-auto md:overflow-visible mix-blend-multiply">
           <NavButton 
             active={currentView === 'daily_question'} onClick={() => setCurrentView('daily_question')}
@@ -545,12 +995,24 @@ export default function App() {
             active={currentView === 'forget_me_nots'} onClick={() => setCurrentView('forget_me_nots')}
             icon={<Bookmark className="w-6 h-6" />} label="Ghi nhớ" color="text-sky-500" layout="vertical"
           />
-          <NavButton 
-            active={currentView === 'cycle'} onClick={() => setCurrentView('cycle')}
-            icon={<CalendarHeart className="w-6 h-6" />} label="Lịch Dâu" color="text-rose-500" layout="vertical"
-          />
+          {userProfile?.gender === 'female' && (
+            <NavButton 
+              active={currentView === 'cycle'} onClick={() => setCurrentView('cycle')}
+              icon={<CalendarHeart className="w-6 h-6" />} label="Lịch Dâu" color="text-rose-500" layout="vertical"
+            />
+          )}
         </div>
       </nav>
+      )}
+
+      {appMode === 'entertainment' && (
+         <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-4 pb-safe md:pb-6 pointer-events-none">
+           <div className="max-w-md mx-auto bg-white/95 backdrop-blur-xl border border-violet-100 rounded-3xl shadow-[0_-8px_30px_-15px_rgba(0,0,0,0.1)] h-16 flex items-center justify-around px-2 relative pointer-events-auto">
+                 <BottomNavLink active={currentView === 'social_feed'} onClick={() => setCurrentView('social_feed')} label="Bảng tin" icon={<List className="w-5 h-5"/>} color="text-violet-600"/>
+                 {/* Reserved for future entertainment features */}
+                 <BottomNavLink active={currentView === 'couple_games'} onClick={() => setCurrentView('couple_games')} label="Mini Games" icon={<Gamepad2 className="w-5 h-5"/>} color="text-violet-600"/>
+           </div>
+        </div>
       )}
 
       {appMode === 'finance' && (
@@ -576,31 +1038,52 @@ export default function App() {
       {appMode === 'finance' && <TransactionForm isOpen={isTransactionFormOpen} onClose={() => setIsTransactionFormOpen(false)} onSuccess={() => setIsTransactionFormOpen(false)} transactions={transactions} />}
 
       <AnimatePresence>
-        {showSignOutConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm" onClick={() => setShowSignOutConfirm(false)} />
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              className="bg-white rounded-[2rem] p-8 w-full max-w-sm relative z-10 shadow-2xl overflow-hidden"
-            >
-              <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mb-6 mx-auto">
-                 <LogOut className="w-8 h-8 ml-1" />
-              </div>
-              <h3 className="text-2xl font-display font-medium text-neutral-900 mb-2 text-center tracking-tight">Đăng xuất</h3>
-              <p className="text-neutral-500 mb-8 text-[15px] text-center leading-relaxed">Bạn có chắc chắn muốn đăng xuất tài khoản? Bạn sẽ cần đăng nhập lại để tiếp tục sử dụng.</p>
-              <div className="flex gap-3">
-                <button onClick={() => setShowSignOutConfirm(false)} className="flex-1 py-3.5 bg-neutral-100 font-semibold text-neutral-700 rounded-xl hover:bg-neutral-200 transition-colors">Hủy bỏ</button>
-                <button onClick={() => { setShowSignOutConfirm(false); signOut(auth); }} className="flex-1 py-3.5 bg-red-500 font-bold text-white rounded-xl hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30">Đăng xuất</button>
-              </div>
-            </motion.div>
-          </div>
+        {showFriends && user && (
+          <FriendsView user={user} onClose={() => setShowFriends(false)} onStartCall={(friendId, isVideo = true) => setActiveCall({ friendId, isIncoming: false, isVideo })} />
         )}
       </AnimatePresence>
 
-      <AiChatWidget />
+      <AnimatePresence>
+        {activeCall && (
+          <VideoCall 
+            user={user} 
+            friendId={activeCall.friendId} 
+            isIncoming={activeCall.isIncoming}
+            isVideo={activeCall.isVideo}
+            onClose={() => setActiveCall(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {appToast && (
+          <motion.div
+             initial={{ opacity: 0, y: -50, scale: 0.95 }}
+             animate={{ opacity: 1, y: 0, scale: 1 }}
+             exit={{ opacity: 0, y: -50, scale: 0.95 }}
+             className={`fixed top-6 right-6 md:top-10 md:right-10 z-[300] bg-white rounded-2xl p-4 shadow-2xl border flex items-start gap-4 max-w-sm cursor-pointer ${appToast.type === 'error' ? 'border-rose-200' : 'border-sky-100'}`}
+             onClick={() => {
+                if (appToast.type !== 'error') setShowFriends(true);
+                setAppToast(null);
+             }}
+          >
+             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${appToast.type === 'error' ? 'bg-rose-100' : 'bg-sky-100'}`}>
+               {appToast.type === 'error' ? (
+                 <AlertCircle className="w-5 h-5 text-rose-600" />
+               ) : (
+                 <MessageCircle className="w-5 h-5 text-sky-600" />
+               )}
+             </div>
+             <div className="flex-1 min-w-0 pr-4">
+               <h4 className={`font-bold text-sm mb-0.5 ${appToast.type === 'error' ? 'text-rose-800' : 'text-slate-800'}`}>{appToast.title}</h4>
+               <p className="text-slate-600 text-sm truncate">{appToast.body}</p>
+             </div>
+             <div className={`w-2 h-2 rounded-full absolute top-5 right-5 ${appToast.type === 'error' ? 'bg-rose-500' : 'bg-sky-500'}`} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    <AiChatWidget transactions={filteredTransactions} appMode={appMode} user={user} />
     </div>
   );
 }
@@ -622,13 +1105,13 @@ function TopNavLink({ active, onClick, icon, label }: { active: boolean, onClick
   );
 }
 
-function BottomNavLink({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+function BottomNavLink({ active, onClick, icon, label, color = 'text-indigo-600' }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, color?: string }) {
   return (
     <button 
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-1.5 w-16 transition-all ${
         active 
-          ? 'text-indigo-600' 
+          ? color 
           : 'text-neutral-400 hover:text-neutral-600'
       }`}
     >
@@ -649,7 +1132,7 @@ function NavButton({ active, onClick, icon, label, color, layout = 'auto' }: { a
   return (
     <button 
       onClick={onClick}
-      className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all min-w-[64px] sm:min-w-[72px] md:min-w-0 ${
+      className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-2xl transition-all active:scale-95 touch-manipulation min-w-[64px] sm:min-w-[72px] md:min-w-0 ${
         active 
           ? `bg-neutral-900 ${color}` 
           : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'

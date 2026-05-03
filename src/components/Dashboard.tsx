@@ -117,6 +117,38 @@ export default function Dashboard({ transactions, onDeleteTransaction, setCurren
         </motion.div>
       </div>
 
+      {/* Upcoming Transactions */}
+      {transactions.filter(t => new Date(t.date) > new Date()).length > 0 && (
+        <motion.div
+           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+           className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-neutral-100/50"
+        >
+          <h3 className="text-lg font-display font-bold text-neutral-900 mb-4">Sắp tới</h3>
+          <div className="space-y-3">
+            {transactions
+              .filter(t => new Date(t.date) > new Date())
+              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+              .slice(0, 3)
+              .map(t => (
+                <div key={t.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-2xl">
+                   <div className="flex items-center gap-3">
+                     <div className={`p-2 rounded-xl ${t.type === TransactionType.EXPENSE ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                       <Clock className="w-4 h-4" />
+                     </div>
+                     <div>
+                       <p className="text-sm font-bold text-neutral-900">{t.description}</p>
+                       <p className="text-xs text-neutral-500">{new Date(t.date).toLocaleDateString('vi-VN')}</p>
+                     </div>
+                   </div>
+                   <p className={`text-sm font-bold font-mono tracking-tight ${t.type === TransactionType.INCOME ? 'text-green-600' : 'text-red-500'}`}>
+                     {t.type === TransactionType.INCOME ? '+' : '-'}{t.amount.toLocaleString()}đ
+                   </p>
+                </div>
+              ))}
+          </div>
+        </motion.div>
+      )}
+
       <div className="space-y-8 mt-8">
         <div className="flex items-center justify-between">
            <h3 className="text-xl font-display font-bold text-neutral-900">Giao dịch gần đây</h3>

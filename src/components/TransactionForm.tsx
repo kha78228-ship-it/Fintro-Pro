@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { X, Plus, Minus, Calendar, Tag, FileText, Check, Mic, Loader2, Sparkles, Image as ImageIcon, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { TransactionType, Transaction } from '../types';
+import { TransactionType, Transaction, TransactionStatus } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
 import { db, auth } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -30,6 +30,18 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
   const [smartText, setSmartText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const rawValue = e.target.value.replace(/\./g, ''); // Remove existing dots
+      if (rawValue === '') {
+          setAmount('');
+          return;
+      }
+      if (/^\d*$/.test(rawValue)) { // Only digits allowed
+          const formattedValue = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+          setAmount(formattedValue);
+      }
+  };
+
   const processImageInput = async (file: File) => {
     setAiProcessing(true);
     setAiError('');
@@ -43,14 +55,25 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
 
         try {
           const ai = new GoogleGenAI({ apiKey: (import.meta as any).env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY as string });
-          const prompt = `Phân tích hóa đơn, hình ảnh chuyển khoản ngân hàng, hoặc biên lai này. 
-          Trả về kết quả dưới định dạng JSON nguyên bản với chữ thường như sau (số tiền lấy chính xác ĐỊNH DẠNG SỐ KHÔNG CHỨA DẤU CHẤM HOẶC PHẨY, type tự xác định xem là thu hay chi, description ghi rõ nội dung chi tiêu và nguồn tiền ví dụ Momo, VCB):
-          {
-            "amount": số tiền (kiểu số nguyên, e.g. 50000),
-            "type": "expense" hoặc "income",
-            "description": "ghi chú + nguồn tiền (ví dụ: Highland Coffee - Nguồn: Momo)",
-            "categoryKeyword": "từ khóa thể loại ví dụ: ăn uống, di chuyển, mua sắm"
-          }`;
+          
+          const categoriesInfo = DEFAULT_CATEGORIES.map(c => ({ id: c.id, name: c.name, type: c.type }));
+          const catsStr = JSON.stringify(categoriesInfo);
+
+          const prompt = `Phân tích hóa đơn, hình ảnh chuyển khoản ngân hàng, lịch sử trả tiền, hoặc biên lai này. 
+CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
+1. Xác định giao dịch GẦN NHẤT (trên cùng) nếu có nhiều giao dịch. BỎ QUA các giao dịch có chữ "Đã hủy". Chỉ lấy giao dịch thành công.
+2. Dòng tiền:
+   - Nếu số tiền có dấu "+" (cộng) hoặc chữ "Nhận" / "Tiền vào" -> type là "income".
+   - Nếu số tiền có dấu "-" (trừ) hoặc chữ "Thanh toán" / "Nạp" / "Trừ" -> type là "expense".
+3. TRÍCH XUẤT MÔ TẢ (description):
+   - Ghi rõ nội dung giao dịch, ví dụ "Nạp điện thoại", "Nhận tiền từ TRUONG THI THUY", "FUNTAP - Goi-50000".
+   - BẮT BUỘC nhận diện Nguồn tiền/Ví điện tử từ giao diện hoặc logo và THÊM VÀO CUỐI MÔ TẢ dạng "- Nguồn: [Tên nguồn]".
+   - Nhìn màu sắc giao diện/icon để đoán ví nếu không có chữ rõ: Đỏ/Hồng -> MoMo; Xanh lá sẫm -> Viettel Money; Xanh dương -> ZaloPay.
+   - Nhìn dòng chữ nhỏ ở dưới (VD: "Từ Túi Thần Tài", "Số dư sinh lời", "MBBank") để ghi rõ nguồn. 
+   - Ví dụ: "Nạp điện thoại - Nguồn: Viettel Money" hoặc "FUNTAP - Nguồn: ZaloPay (Số dư sinh lời)".
+4. PHÂN LOẠI (categoryId):
+   - Chọn ra MỘT categoryId phù hợp nhất trong danh sách sau: ${catsStr}
+   - Dựa vào nội dung giao dịch hoặc icon của giao dịch (chẳng hạn nạp thẻ game -> Giải trí -> cat_entertainment, điện thoại -> cat_utils, ăn uống -> cat_food, nhận tiền -> cat_other_inc). Chọn ID (ví dụ: "cat_entertainment").`;
 
           const response = await ai.models.generateContent({
             model: "gemini-3.1-pro-preview",
@@ -63,6 +86,19 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
                 }
               }
             ],
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  amount: { type: Type.INTEGER, description: "Số tiền nguyên bản (không dấu phân cách, là số dương)" },
+                  type: { type: Type.STRING, enum: ['expense', 'income'], description: "Phân loại hóa đơn là thu (income) hay chi (expense) dựa vào dấu +/-" },
+                  description: { type: Type.STRING, description: "Nội dung chi tiêu kèm nguồn tiền (Ví dụ: Thanh toán điện - Nguồn: MoMo)" },
+                  categoryId: { type: Type.STRING, description: "ID của thể loại được chọn từ danh sách cung cấp" }
+                },
+                required: ["amount", "type", "description", "categoryId"]
+              }
+            }
           });
 
           const resultText = response.text || '';
@@ -71,19 +107,17 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
              const data = JSON.parse(jsonStrMatch[0]);
              if (data.amount) {
                const cleanedStr = data.amount.toString().replace(/[^\d]/g, '');
-               setAmount(cleanedStr);
+               const formattedValue = cleanedStr.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+               setAmount(formattedValue);
              }
              if (data.type === 'expense' || data.type === 'income') setType(data.type as TransactionType);
              if (data.description) setDescription(data.description);
              
-             if (data.categoryKeyword) {
-                const kw = data.categoryKeyword.toLowerCase();
-                const cats = DEFAULT_CATEGORIES.filter(c => c.type === data.type || c.type === 'both');
-                const found = cats.find(c => c.name.toLowerCase().includes(kw) || c.id.toLowerCase().includes(kw));
-                if (found) {
-                   setCategory(found.id);
-                } else if (cats.length > 0) {
-                   setCategory(cats[0].id);
+             if (data.categoryId) {
+                const validCat = DEFAULT_CATEGORIES.find(c => c.id === data.categoryId);
+                if (validCat) {
+                   setCategory(validCat.id);
+                   setType(validCat.type === 'both' ? data.type : validCat.type);
                 }
              }
           } else {
@@ -164,48 +198,44 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
     setAiError('');
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-      const prompt = `Phân tích câu nói: "${text}". 
-      Trả về kết quả dưới định dạng JSON nguyên bản với chữ thường như sau:
-      {
-        "amount": số tiền (kiểu số KHÔNG CHỨA DẤU CHẤM HOẶC PHẨY, e.g. 50000),
-        "type": "expense" hoặc "income",
-        "description": "ghi chú",
-        "categoryKeyword": "từ khóa thể loại ví dụ: ăn uống, di chuyển, mua sắm"
-      }`;
-
+      
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: prompt,
+        contents: `Phân tích câu nói: "${text}".`,
+        config: {
+          systemInstruction: "Bạn là chuyên gia phân tích giao dịch tài chính. Trích xuất thông tin giao dịch chính xác từ câu nói của người dùng.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              amount: { type: Type.INTEGER, description: "Số tiền giao dịch, không dấu phân cách" },
+              type: { type: Type.STRING, enum: ['expense', 'income'], description: "Loại giao dịch" },
+              description: { type: Type.STRING, description: "Mô tả ngắn gọn" },
+              categoryKeyword: { type: Type.STRING, description: "Từ khóa thể loại ví dụ: ăn uống, di chuyển" }
+            },
+            required: ["amount", "type", "description", "categoryKeyword"]
+          }
+        }
       });
 
-      const resultText = response.text || '';
-      const jsonStrMatch = resultText.match(/\{[\s\S]*\}/);
-      if (jsonStrMatch) {
-         const data = JSON.parse(jsonStrMatch[0]);
-         if (data.amount) {
-           const cleanedStr = data.amount.toString().replace(/[^\d]/g, '');
-           setAmount(cleanedStr);
-         }
-         if (data.type === 'expense' || data.type === 'income') setType(data.type as TransactionType);
-         if (data.description) setDescription(data.description);
-         
-         if (data.categoryKeyword) {
-            // Find best matching category
-            const kw = data.categoryKeyword.toLowerCase();
-            const cats = DEFAULT_CATEGORIES.filter(c => c.type === data.type || c.type === 'both');
-            const found = cats.find(c => c.name.toLowerCase().includes(kw) || c.id.toLowerCase().includes(kw));
-            if (found) {
-               setCategory(found.id);
-            } else if (cats.length > 0) {
-               setCategory(cats[0].id);
-            }
-         }
-      } else {
-         setAiError('Không hiểu được, vui lòng nhập thủ công');
+      const data = JSON.parse(response.text || '{}');
+      if (data.amount) {
+          const formattedValue = data.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+          setAmount(formattedValue);
+      }
+      if (data.type) setType(data.type as TransactionType);
+      if (data.description) setDescription(data.description);
+      
+      if (data.categoryKeyword) {
+          const kw = data.categoryKeyword.toLowerCase();
+          const cats = DEFAULT_CATEGORIES.filter(c => c.type === (data.type as TransactionType) || c.type === 'both');
+          const found = cats.find(c => c.name.toLowerCase().includes(kw) || c.id.toLowerCase().includes(kw));
+          if (found) setCategory(found.id);
+          else if (cats.length > 0) setCategory(cats[0].id);
       }
     } catch (error) {
       console.error(error);
-      setAiError('Lỗi kết nối AI');
+      setAiError('Không thể hiểu được nội dung, mời nhập thủ công');
     } finally {
       setAiProcessing(false);
     }
@@ -231,13 +261,20 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
+    
+    const parsedAmount = parseFloat(amount.replace(/\./g, ''));
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert("Vui lòng nhập số tiền hợp lệ");
+      return;
+    }
 
     setLoading(true);
     const path = `users/${auth.currentUser.uid}/transactions`;
     try {
       const transactionData: Omit<Transaction, 'id'> = {
-        amount: parseFloat(amount),
+        amount: parseFloat(amount.replace(/\./g, '')),
         type,
+        status: TransactionStatus.COMPLETED,
         category,
         description,
         date: new Date(date).toISOString(),
@@ -254,6 +291,14 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
       handleFirestoreError(error, OperationType.CREATE, path);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTypeChange = (newType: TransactionType) => {
+    setType(newType);
+    const validCats = DEFAULT_CATEGORIES.filter(c => c.type === newType || c.type === 'both');
+    if (!validCats.find(c => c.id === category) && validCats.length > 0) {
+      setCategory(validCats[0].id);
     }
   };
 
@@ -353,7 +398,7 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
         <div className="flex p-1 bg-neutral-100 rounded-xl">
           <button
             type="button"
-            onClick={() => setType(TransactionType.EXPENSE)}
+            onClick={() => handleTypeChange(TransactionType.EXPENSE)}
             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition-all ${
               type === TransactionType.EXPENSE ? 'bg-white shadow-sm text-red-600' : 'text-neutral-500 hover:text-neutral-700'
             }`}
@@ -362,7 +407,7 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
           </button>
           <button
             type="button"
-            onClick={() => setType(TransactionType.INCOME)}
+            onClick={() => handleTypeChange(TransactionType.INCOME)}
             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition-all ${
               type === TransactionType.INCOME ? 'bg-white shadow-sm text-green-600' : 'text-neutral-500 hover:text-neutral-700'
             }`}
@@ -376,10 +421,10 @@ export default function TransactionForm({ isOpen, onClose, inline, onSuccess, tr
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 font-medium">đ</span>
             <input
-              type="number"
+              type="text"
               required
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={handleAmountChange}
               placeholder="0"
               className="w-full bg-[#f8f9fa] border border-neutral-200 rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold font-mono text-neutral-900 focus:ring-2 focus:ring-neutral-900 outline-none transition-all placeholder:text-neutral-300"
             />

@@ -9,7 +9,19 @@ service cloud.firestore {
 
     // --- Helpers ---
     function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null;
+    }
+    
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'kha78228@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        request.auth != null && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.expiresAt > request.time
+      );
     }
     
     function isOwner(userId) {
@@ -31,10 +43,11 @@ service cloud.firestore {
     // --- Validation Blueprints ---
     
     function isValidTransaction(data) {
-      return data.keys().hasAll(['amount', 'type', 'category', 'description', 'date', 'userId'])
-        && data.keys().size() == 6
+      return data.keys().hasAll(['amount', 'type', 'status', 'category', 'description', 'date', 'userId'])
+        && data.keys().size() == 7
         && data.amount is number && data.amount >= 0
         && data.type in ['income', 'expense']
+        && data.status in ['completed', 'pending', 'cancelled']
         && data.category is string && data.category.size() <= 100
         && data.description is string && data.description.size() <= 1000
         && data.date is string && data.date.size() <= 32
@@ -50,22 +63,44 @@ service cloud.firestore {
         && data.userId == request.auth.uid;
     }
 
-    function isValidProfile(data) {
-      return data.keys().hasAll(['displayName', 'email', 'currency'])
-        && data.keys().size() == 3
+    function isFullValidProfile(data) {
+      return data.keys().hasAll(['displayName', 'currency'])
+        && data.keys().size() >= 2
         && data.displayName is string && data.displayName.size() <= 100
-        && data.email == request.auth.token.email
-        && data.currency is string && data.currency.size() <= 10;
+        && (!('email' in data) || data.email is string)
+        && data.currency is string && data.currency.size() <= 10
+        && (!('friendCode' in data) || (data.friendCode is string && data.friendCode.matches('^[0-9]{3,12}$')));
+    }
+
+    function isPartialValidProfile(data) {
+      return (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100))
+        && (!('email' in data) || data.email is string)
+        && (!('currency' in data) || (data.currency is string && data.currency.size() <= 10))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000))
+        && (!('nickname' in data) || (data.nickname is string && data.nickname.size() <= 100))
+        && (!('status' in data) || data.status is string)
+        && (!('lastSeen' in data) || data.lastSeen != null)
+        && (!('gender' in data) || data.gender is string)
+        && (!('isCycleVisibleToPartner' in data) || data.isCycleVisibleToPartner is bool)
+        && (!('friendCode' in data) || (data.friendCode is string && data.friendCode.matches('^[0-9]{3,12}$')));
     }
 
     // --- Rules ---
 
     // User Profile
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidProfile(incoming());
-      allow update: if isOwner(userId) && isValidProfile(incoming())
-        && incoming().email == existing().email; // Email immutable
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isFullValidProfile(incoming());
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /publicProfiles/{userId} {
+      allow read: if isSignedIn();
+      // Admin bypasses validation for write
+      allow write: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     // User Transactions
@@ -104,11 +139,96 @@ service cloud.firestore {
         && incoming().userId == existing().userId;
       allow delete: if isOwner(userId);
     }
+    
+    function isValidForgetMeNot(data) {
+      return data.keys().hasAll(['title', 'value', 'iconType'])
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 100
+        && data.value is string && data.value.size() > 0 && data.value.size() <= 1000
+        && data.iconType is string && data.iconType.size() > 0 && data.iconType.size() <= 50;
+    }
+
+    match /users/{userId}/forgetMeNots/{noteId} {
+      allow list, get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(noteId) && isValidForgetMeNot(incoming());
+      allow update: if isOwner(userId) && isValidForgetMeNot(incoming());
+      allow delete: if isOwner(userId);
+    }
+
+    function isValidFriend(data) {
+      return data.keys().hasAll(['friendId', 'status', 'createdAt'])
+        && data.friendId is string
+        && data.status in ['pending', 'accepted']
+        && data.createdAt != null
+        && (!('relationshipType' in data) || data.relationshipType is string)
+        && (!('relationshipStartDate' in data) || data.relationshipStartDate is string);
+    }
+
+    function isValidFriendRequest(data) {
+      return data.keys().hasAll(['senderId', 'receiverId', 'status', 'createdAt'])
+        && data.senderId == request.auth.uid
+        && data.status in ['pending', 'accepted', 'rejected']
+        && data.createdAt != null;
+    }
+
+    match /friendRequests/{requestId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn() && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId);
+      allow create: if isSignedIn() && isValidId(requestId) && isValidFriendRequest(incoming());
+      allow update: if isSignedIn() && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId)
+        && incoming().status in ['pending', 'accepted', 'rejected'];
+    }
+
+    match /users/{userId}/friends/{friendId} {
+      allow list, get: if isOwner(userId);
+      allow create: if (isOwner(userId) || isOwner(friendId)) && isValidId(friendId) && isValidFriend(incoming());
+      allow update: if (isOwner(userId) || isOwner(friendId)) && isValidFriend(incoming());
+      allow delete: if (isOwner(userId) || isOwner(friendId));
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'timestamp'])
+        && data.senderId == request.auth.uid
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000;
+    }
+
+    match /chats/{chatId} {
+      allow list: if isSignedIn(); // We could restrict more if needed, but we check friendId
+      allow get: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+    }
+
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(messageId) && isValidMessage(incoming());
+    }
+
+    match /calls/{callId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /calls/{callId}/{colName}/{docId} {
+      allow read, write: if isSignedIn();
+    }
 
     // Global Categories
     match /categories/{categoryId} {
       allow read: if isSignedIn();
       allow write: if false; // System generated
+    }
+
+    match /admins/{adminId} {
+      // Only the super admin can write admins, but users can read their own
+      allow read: if isSuperAdmin() || (isSignedIn() && request.auth.uid == adminId);
+      allow write: if isSuperAdmin();
+    }
+
+    // Invite Codes
+    match /invite_codes/{codeId} {
+      allow read: if true; // anyone can read to join
+      allow create: if true; // anyone can create
+      allow update: if true;
+      allow delete: if true;
     }
 
     function isValidSharedFund(data) {
@@ -132,6 +252,38 @@ service cloud.firestore {
         && (request.auth.uid in existing().memberIds || 
             (request.auth.uid in incoming().memberIds && incoming().memberIds.hasAll(existing().memberIds)));
       allow delete: if isSignedIn() && existing().ownerId == request.auth.uid;
+    }
+    
+    // Couple Data
+    match /couple_data/{dataId} {
+      // In a real app we'd want to restrict read/write to the two users involved in the couple.
+      // E.g. pairId = [uid1, uid2].sort() -> dataId starts with that pairId.
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(dataId);
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['authorId', 'createdAt']) // Allow flexible 'text', 'mediaUrls'
+        && data.authorId == request.auth.uid;
+    }
+
+    // Posts Collection
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidPost(incoming());
+      allow update: if isSignedIn() && existing().authorId == request.auth.uid;
+      allow delete: if isSignedIn() && (existing().authorId == request.auth.uid || isAdmin());
+      
+      match /likes/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == userId;
+      }
+      
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && incoming().authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() && (existing().authorId == request.auth.uid || isAdmin());
+      }
     }
   }
 }

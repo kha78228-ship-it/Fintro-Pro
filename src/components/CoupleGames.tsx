@@ -1,102 +1,185 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { Gamepad2, Check, X, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Gamepad2, Swords, Ghost, Diamond, Crown, ChevronLeft, Users, Zap, Clock } from 'lucide-react';
 
-export default function CoupleGames() {
-  const [started, setStarted] = useState(false);
-  const [currentQ, setCurrentQ] = useState(0);
-  const [score, setScore] = useState(0);
+import ChessGame from './games/ChessGame';
 
-  const questions = [
-    {
-      q: "Vị kem yêu thích của người ấy là gì?",
-      options: ["Matcha", "Chocolate", "Vani", "Dâu tây"],
-      answer: 0
-    },
-    {
-      q: "Người ấy thích ở nhà xem phim hay ra ngoài đi dạo cuối tuần?",
-      options: ["Ở nhà xem phim chilling", "Ra ngoài hóng gió", "Đi cafe chụp ảnh", "Ngủ nướng cả ngày"],
-      answer: 2
-    },
-    {
-      q: "Món quà nào khiến người ấy cảm động nhất?",
-      options: ["Tự làm đồ handmade", "Trang sức đắt tiền", "Dẫn đi ăn ngon", "Chuyển khoản :))"],
-      answer: 0
+const GAMES_LIST = [
+  {
+    id: 'chess',
+    name: 'Cờ Vua',
+
+    description: 'Đấu trí căng thẳng trên bàn cờ 64 ô.',
+    icon: <Crown className="w-8 h-8 text-amber-500" />,
+    color: 'from-amber-100 to-orange-50',
+    borderColor: 'border-amber-200',
+    tag: '2 Người',
+    banner: 'bg-amber-500',
+  },
+  {
+    id: 'ludo',
+    name: 'Cờ Cá Ngựa',
+    description: 'Cuộc đua kỳ thú về đích của 4 màu quân.',
+    icon: <Ghost className="w-8 h-8 text-sky-500" />,
+    color: 'from-sky-100 to-blue-50',
+    borderColor: 'border-sky-200',
+    tag: '2-4 Người',
+    banner: 'bg-sky-500',
+  },
+  {
+    id: 'tien-len',
+    name: 'Tiến Lên Miền Nam',
+    description: 'Chặt heo, tới trắng, nghẹt thở từng vòng.',
+    icon: <Diamond className="w-8 h-8 text-rose-500" />,
+    color: 'from-rose-100 to-red-50',
+    borderColor: 'border-rose-200',
+    tag: '2-4 Người',
+    banner: 'bg-rose-500',
+  },
+  {
+    id: 'phom',
+    name: 'Bài Miền Bắc (Phỏm)',
+    description: 'Ăn chốt, Ù tròn, tính toán từng lá bài.',
+    icon: <Swords className="w-8 h-8 text-emerald-500" />,
+    color: 'from-emerald-100 to-green-50',
+    borderColor: 'border-emerald-200',
+    tag: '2-4 Người',
+    banner: 'bg-emerald-500',
+  },
+  {
+    id: 'tan',
+    name: 'Tấn',
+    description: 'Đỡ bão, tấn công, phòng thủ tuyệt đối.',
+    icon: <Zap className="w-8 h-8 text-violet-500" />,
+    color: 'from-violet-100 to-purple-50',
+    borderColor: 'border-violet-200',
+    tag: '2-4 Người',
+    banner: 'bg-violet-500',
+  }
+];
+
+export default function CoupleGames({ user }: { user?: any }) {
+  const [selectedGame, setSelectedGame] = useState<string | null>(null);
+
+  const renderGameLobby = () => {
+    if (selectedGame === 'chess') {
+       return <ChessGame user={user} onExit={() => setSelectedGame(null)} />;
     }
-  ];
 
-  const handleSelect = (idx: number) => {
-    if (idx === questions[currentQ].answer) setScore(score + 1);
-    setCurrentQ(currentQ + 1);
+    const game = GAMES_LIST.find(g => g.id === selectedGame);
+    if (!game) return null;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="max-w-4xl mx-auto"
+      >
+        <button 
+          onClick={() => setSelectedGame(null)}
+          className="flex items-center gap-2 text-neutral-500 hover:text-neutral-900 mb-6 font-medium transition-colors"
+        >
+          <ChevronLeft className="w-5 h-5" /> Trở lại sảnh game
+        </button>
+
+        <div className={`rounded-3xl p-8 text-white shadow-xl ${game.banner} mb-8 relative overflow-hidden`}>
+           <div className="absolute top-0 right-0 p-8 opacity-20 transform scale-150 translate-x-4 -translate-y-4">
+              {game.icon}
+           </div>
+           
+           <div className="relative z-10">
+             <div className="bg-white/20 inline-block px-4 py-1.5 rounded-full text-sm font-bold tracking-widest uppercase mb-4 shadow-sm backdrop-blur-md">
+                Phòng chờ
+             </div>
+             <h2 className="text-4xl font-display font-bold mb-2 tracking-tight">{game.name}</h2>
+             <p className="text-white/80 font-medium text-lg max-w-lg mb-6">{game.description}</p>
+             
+             <div className="flex flex-wrap gap-3">
+               <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2">
+                 <Users className="w-5 h-5" />
+                 <span className="font-medium">{game.tag}</span>
+               </div>
+               <div className="bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-xl flex items-center gap-2">
+                 <Clock className="w-5 h-5" />
+                 <span className="font-medium">Thời gian thực</span>
+               </div>
+             </div>
+           </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-10 text-center shadow-xl shadow-neutral-200/50 border border-neutral-100 flex flex-col items-center justify-center min-h-[300px]">
+           <Gamepad2 className="w-16 h-16 text-neutral-300 mb-6 animate-bounce" />
+           <h3 className="text-2xl font-bold text-neutral-800 mb-3 font-display">Hệ thống đang bảo trì</h3>
+           <p className="text-neutral-500 max-w-md mx-auto mb-8 leading-relaxed">
+             Tính năng {game.name} đang trong quá trình phát triển và hoàn thiện. Vui lòng quay lại trong các bản cập nhật sắp tới!
+           </p>
+           <button 
+             onClick={() => setSelectedGame(null)}
+             className="bg-neutral-900 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-neutral-900/20 hover:bg-neutral-800 transition-all active:scale-95"
+           >
+             Khám phá game khác
+           </button>
+        </div>
+      </motion.div>
+    );
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="text-center space-y-2 mb-8">
-        <h2 className="text-3xl font-display font-bold text-indigo-600 tracking-tight flex items-center justify-center gap-3">
-          <Gamepad2 className="w-8 h-8 fill-indigo-100" />
-          Mức Độ Hiểu Nhau
-        </h2>
-        <p className="text-neutral-500">Xem bạn nắm rõ sở thích của nửa kia đến đâu nhé!</p>
-      </div>
+    <div className="pb-safe">
+      <AnimatePresence mode="wait">
+        {!selectedGame ? (
+          <motion.div 
+            key="lobby"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="max-w-5xl mx-auto space-y-8"
+          >
+            <div className="text-center space-y-3 mb-10 pt-4">
+              <h2 className="text-4xl font-display font-bold text-violet-600 tracking-tight flex items-center justify-center gap-3">
+                <Gamepad2 className="w-10 h-10" />
+                Sảnh Trò Chơi
+              </h2>
+              <p className="text-neutral-500 text-lg">Giây phút giải trí vui vẻ cùng bạn bè và người ấy!</p>
+            </div>
 
-      {!started ? (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl p-8 text-center shadow-xl shadow-indigo-500/5 border border-indigo-100 space-y-6"
-        >
-          <Trophy className="w-16 h-16 text-amber-400 mx-auto" />
-          <h3 className="text-2xl font-bold font-display">Quiz: Bạn có hiểu người ấy?</h3>
-          <p className="text-neutral-500">Người ấy đã trả lời xong bộ câu hỏi này. Giờ đến lượt bạn trổ tài đoán ý đồng đội!</p>
-          <button 
-            onClick={() => setStarted(true)}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all"
-          >
-            Bắt Đầu Chơi
-          </button>
-        </motion.div>
-      ) : currentQ < questions.length ? (
-        <motion.div 
-          key={currentQ}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="bg-white rounded-3xl p-8 shadow-xl shadow-indigo-500/5 border border-indigo-100"
-        >
-          <div className="text-sm font-bold text-indigo-500 mb-4 tracking-widest uppercase">Câu {currentQ + 1} / {questions.length}</div>
-          <h3 className="text-xl font-semibold mb-6">{questions[currentQ].q}</h3>
-          <div className="space-y-3">
-            {questions[currentQ].options.map((opt, idx) => (
-              <button 
-                key={idx}
-                onClick={() => handleSelect(idx)}
-                className="w-full text-left p-4 rounded-xl border border-neutral-200 hover:border-indigo-500 hover:bg-indigo-50 font-medium text-neutral-700 transition-all"
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      ) : (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-3xl p-10 text-center shadow-xl space-y-4"
-        >
-          <Trophy className="w-20 h-20 text-yellow-300 mx-auto drop-shadow-md mb-4" />
-          <h3 className="text-3xl font-bold font-display">Điểm của bạn: {score}/{questions.length}</h3>
-          <p className="text-indigo-100 text-lg">
-            {score === questions.length ? "Tuyệt vời! Bạn quá hiểu người ấy luôn 😍" : 
-             score > 0 ? "Khá lắm, nhưng cần cố gắng quan sát thêm nhé! 😅" : "Toang rồi, tối nay ra sofa ngủ nhé =))"}
-          </p>
-          <button 
-            onClick={() => {setStarted(false); setCurrentQ(0); setScore(0);}}
-            className="mt-6 bg-white text-indigo-600 font-bold px-8 py-3 rounded-xl transition-all hover:bg-neutral-50"
-          >
-            Chơi Lại
-          </button>
-        </motion.div>
-      )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {GAMES_LIST.map((game, idx) => (
+                <motion.button
+                  whileHover={{ y: -5, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  key={game.id}
+                  onClick={() => setSelectedGame(game.id)}
+                  className={`bg-gradient-to-br ${game.color} border ${game.borderColor} rounded-3xl p-6 text-left shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col h-full relative overflow-hidden`}
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-150 z-0"></div>
+                  
+                  <div className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl w-fit mb-5 shadow-sm relative z-10 border border-white/50 group-hover:rotate-12 transition-transform">
+                    {game.icon}
+                  </div>
+                  
+                  <h3 className="text-xl font-bold text-neutral-900 mb-2 font-display relative z-10 tracking-tight">{game.name}</h3>
+                  <p className="text-sm text-neutral-600 mb-6 flex-1 relative z-10 leading-relaxed">{game.description}</p>
+                  
+                  <div className="mt-auto flex items-center justify-between relative z-10">
+                    <span className="text-xs font-bold uppercase tracking-widest bg-white/80 px-3 py-1.5 rounded-full text-neutral-600 shadow-sm">
+                      {game.tag}
+                    </span>
+                    <span className="text-sm font-bold text-neutral-900 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                      Chơi Ngay <ChevronLeft className="w-4 h-4 rotate-180" />
+                    </span>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div key="game" className="h-full">
+            {renderGameLobby()}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

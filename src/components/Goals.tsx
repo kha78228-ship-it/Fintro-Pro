@@ -226,6 +226,7 @@ export default function Goals() {
               <div className="space-y-4">
                 <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
                   <motion.div 
+                    layout
                     initial={{ width: 0 }}
                     animate={{ width: `${percent}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}

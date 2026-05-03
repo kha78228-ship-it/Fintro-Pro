@@ -4,9 +4,10 @@ import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Perce
 
 interface ToolsProps {
   setCurrentView?: (view: any) => void;
+  appMode?: string;
 }
 
-export default function Tools({ setCurrentView }: ToolsProps) {
+export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProps) {
   const [income, setIncome] = useState<string>('');
   
   // Lãi kép
@@ -73,25 +74,48 @@ export default function Tools({ setCurrentView }: ToolsProps) {
         </div>
       </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-rose-500 to-pink-500 rounded-3xl p-6 md:p-8 flex items-center justify-between shadow-lg shadow-rose-500/20 text-white cursor-pointer hover:scale-[1.02] transition-transform"
-        onClick={() => setCurrentView && setCurrentView('cycle')}
-      >
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center shrink-0">
-            <Heart className="w-8 h-8 text-white fill-white/50" />
-          </div>
-          <div>
-            <h3 className="text-2xl font-bold font-display">Lịch Phụ Nữ</h3>
-            <p className="text-rose-100 mt-1">Theo dõi chu kỳ kinh nguyệt và sức khỏe sinh sản an toàn, riêng tư.</p>
-          </div>
-        </div>
-        <div className="hidden md:block">
-          <div className="px-6 py-3 bg-white text-rose-600 rounded-full font-bold">Khám phá ngay</div>
-        </div>
-      </motion.div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Báo cáo tài chính */}
+        {appMode === 'finance' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="col-span-1 md:col-span-2 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-3xl p-6 flex items-center justify-between shadow-lg shadow-indigo-500/20 text-white cursor-pointer hover:scale-[1.02] transition-transform"
+            onClick={() => setCurrentView && setCurrentView('reports')}
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                <PieChart className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold font-display">Báo Cáo Tài Chính</h3>
+                <p className="text-indigo-100 text-sm mt-1">Phân tích chuyên sâu dòng tiền của bạn.</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Lịch dâu chị em */}
+        {appMode === 'love' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="col-span-1 md:col-span-2 bg-gradient-to-r from-rose-500 to-pink-500 rounded-3xl p-6 flex items-center justify-between shadow-lg shadow-rose-500/20 text-white cursor-pointer hover:scale-[1.02] transition-transform"
+            onClick={() => setCurrentView && setCurrentView('cycle')}
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                <Heart className="w-7 h-7 text-white fill-white/50" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold font-display">Lịch Dâu Chị Em</h3>
+                <p className="text-rose-100 text-sm mt-1">Theo dõi chu kỳ kinh nguyệt an toàn & riêng tư.</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-8">

@@ -3,10 +3,16 @@ export enum TransactionType {
   EXPENSE = 'expense',
 }
 
+export enum TransactionStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+}
+
 export interface Transaction {
   id?: string;
   amount: number;
   type: TransactionType;
+  status: TransactionStatus;
   category: string;
   description: string;
   date: string; // ISO string
@@ -34,6 +40,8 @@ export interface UserProfile {
   displayName: string;
   email: string;
   currency: string;
+  status?: 'online' | 'offline';
+  lastSeen?: any;
 }
 
 export interface Goal {
