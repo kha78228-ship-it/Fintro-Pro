@@ -5,6 +5,8 @@ import { motion } from 'motion/react';
 import { Crown, User, Brain, ArrowLeft, RefreshCw, Trophy } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { doc, setDoc, onSnapshot, serverTimestamp, collection, query, getDocs, getDoc } from 'firebase/firestore';
+import { GoogleGenAI } from "@google/genai";
+import GameInviteModal from './GameInviteModal';
 
 interface ChessGameProps {
   user: any;
@@ -15,27 +17,113 @@ type GameMode = 'ai' | 'friend' | null;
 type AIDifficulty = 'easy' | 'medium' | 'hard';
 
 export default function ChessGame({ user, onExit }: ChessGameProps) {
-  const [game, setGame] = useState(new Chess());
-  const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>('white');
-  const [mode, setMode] = useState<GameMode>(null);
-  const [difficulty, setDifficulty] = useState<AIDifficulty>('easy');
+  const savedStateStr = localStorage.getItem('__couple_chess_state');
+  const savedState = savedStateStr ? JSON.parse(savedStateStr) : null;
+
+  const [game, setGame] = useState(() => {
+    if (savedState?.mode === 'ai' && savedState?.fen) {
+      const newGame = new Chess();
+      newGame.load(savedState.fen);
+      return newGame;
+    }
+    return new Chess();
+  });
+  const [boardOrientation, setBoardOrientation] = useState<'white' | 'black'>(() => savedState?.boardOrientation || 'white');
+  const [mode, setMode] = useState<GameMode>(() => savedState?.mode === 'ai' ? savedState.mode : null);
+  const [difficulty, setDifficulty] = useState<AIDifficulty>(() => savedState?.difficulty || 'easy');
+  const [winner, setWinner] = useState<string | null>(() => savedState?.winner || null);
+  const [scores, setScores] = useState(() => savedState?.scores || { you: 0, opponent: 0 });
+
   const [gameId, setGameId] = useState<string | null>(null);
   const [isWaitOpponent, setIsWaitOpponent] = useState(false);
   const [friends, setFriends] = useState<any[]>([]);
+  const [friendProfiles, setFriendProfiles] = useState<Record<string, any>>({});
   const [activeGames, setActiveGames] = useState<Record<string, any>>({});
   const [selectedFriend, setSelectedFriend] = useState<any>(null);
   const [isThinking, setIsThinking] = useState(false);
-  const [winner, setWinner] = useState<string | null>(null);
+  
   const [aiColor, setAiColor] = useState<'white' | 'black'>('white');
+  const [isCoachingMode, setIsCoachingMode] = useState(false);
+  const [aiCoachMessage, setAiCoachMessage] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Load from local storage for AI mode
+  useEffect(() => {
+    // Initialized from state directly above
+  }, []);
+
+  // Save to local storage for AI mode
+  useEffect(() => {
+    if (mode === 'ai') {
+      localStorage.setItem('__couple_chess_state', JSON.stringify({
+        fen: game.fen(),
+        mode,
+        difficulty,
+        boardOrientation,
+        scores,
+        winner
+      }));
+    } else if (mode === null) {
+       localStorage.removeItem('__couple_chess_state');
+    }
+  }, [game.fen(), mode, difficulty, boardOrientation, scores, winner]);
+
+  useEffect(() => {
+    if (winner && winner !== 'draw' && mode === 'ai') {
+      // Avoid incrementing on load by checking if the game state matches the win condition newly
+      // Actually, since winner is restored from local storage, this might run again on load.
+      // We will handle score increments inside handleMove instead to avoid duplicate increments.
+    }
+  }, [winner, mode]);
+
+  const handleAskAICoach = async () => {
+    setIsCoachingMode(true);
+    setAiCoachMessage(null);
+    try {
+      const { generateContent } = await import('../../lib/gemini');
+      const prompt = `Bạn là hệ thống Gemma 4 Coach - Vua Cờ Vua ảo. Hãy phân tích sâu tình thế hiện tại dựa trên mã FEN: ${game.fen()} . Lượt tiếp theo là của ${game.turn() === 'w' ? 'Trắng' : 'Đen'}. Hãy đưa ra đánh giá chiến thuật cực chuẩn: lợi thế đang nghiêng về ai? Nên tập trung phòng thủ nhánh nào hay tấn công vào đâu? (Trả về phân tích ngắn gọn, súc tích nhưng sắc bén, hướng dẫn như một đại kiện tướng).`;
+      
+      const response = await generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+      });
+
+      if (response.text) {
+        setAiCoachMessage(response.text);
+      }
+    } catch (e: any) {
+      console.error(e);
+      let errMsg = e instanceof Error ? e.message : 'Hãy thử lại';
+      if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid") || errMsg.includes("not find API key") || errMsg.includes("API key") || errMsg.includes("Khóa API") || errMsg.includes("API_KEY")) {
+         errMsg = "Khóa API không hợp lệ. Vui lòng vào Cài đặt (Settings) -> Secrets để nhập hoặc đổi khóa GEMINI_API_KEY. Sau đó Tải lại trang (F5).";
+      } else if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+         errMsg = "Hệ thống đang quá tải hoặc hết hạn mức. Vui lòng thêm/đổi khóa GEMINI_API_KEY trong Settings -> Secrets.";
+      }
+      setAiCoachMessage(`Oops! Lỗi AI: ${errMsg}`);
+    } finally {
+      setIsCoachingMode(false);
+    }
+  };
 
   // Load friends and their games
   useEffect(() => {
     if (!user) return;
+    const unsubscribers: (() => void)[] = [];
+    
     const fetchFriendsAndGames = async () => {
       const q = query(collection(db, `users/${user.uid}/friends`));
       const snap = await getDocs(q);
       const friendsList = snap.docs.map(d => ({ friendId: d.id, ...d.data() }));
       setFriends(friendsList);
+      
+      friendsList.forEach(f => {
+        const unsub = onSnapshot(doc(db, 'publicProfiles', f.friendId), (docSnap) => {
+          if (docSnap.exists()) {
+             setFriendProfiles(prev => ({ ...prev, [f.friendId]: docSnap.data() }));
+          }
+        });
+        unsubscribers.push(unsub);
+      });
 
       const gamesStatus: Record<string, any> = {};
       await Promise.all(friendsList.map(async (f) => {
@@ -48,7 +136,10 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
       setActiveGames(gamesStatus);
     };
     fetchFriendsAndGames();
+    
+    return () => unsubscribers.forEach(u => u());
   }, [user]);
+
 
   // Online Multiplayer Listener
   useEffect(() => {
@@ -87,10 +178,10 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
     }
   };
 
-  const startFriendGame = async (friend: any) => {
-    setSelectedFriend(friend);
+  const startFriendGame = async (opponentUid: string) => {
+    setSelectedFriend({ friendId: opponentUid, displayName: 'Đối thủ' });
     setMode('friend');
-    const newGameId = `chess_${[user.uid, friend.friendId].sort().join('_')}`;
+    const newGameId = `chess_${[user.uid, opponentUid].sort().join('_')}`;
     setGameId(newGameId);
     setWinner(null);
 
@@ -112,9 +203,9 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
       await setDoc(doc(db, 'couple_data', newGameId), {
         type: 'chess',
         fen: newGame.fen(),
-        players: [user.uid, friend.friendId],
+        players: [user.uid, opponentUid],
         white: user.uid,
-        black: friend.friendId,
+        black: opponentUid,
         updatedAt: serverTimestamp()
       }, { merge: true });
     }
@@ -138,9 +229,17 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
     }, { merge: true });
   };
 
-  const checkGameOver = (cg: Chess) => {
+  const checkGameOver = (cg: Chess, updateScore: boolean = false) => {
     if (cg.isCheckmate()) {
-      setWinner(cg.turn() === 'w' ? 'black' : 'white');
+      const winString = cg.turn() === 'w' ? 'black' : 'white';
+      setWinner(winString);
+      if (updateScore && mode === 'ai') {
+        if (winString === boardOrientation) {
+          setScores(s => ({ ...s, you: s.you + 1 }));
+        } else {
+          setScores(s => ({ ...s, opponent: s.opponent + 1 }));
+        }
+      }
     } else if (cg.isDraw() || cg.isStalemate() || cg.isThreefoldRepetition()) {
       setWinner('draw');
     }
@@ -171,7 +270,7 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
       });
 
       setGame(gameCopy);
-      checkGameOver(gameCopy);
+      checkGameOver(gameCopy, true);
       
       if (mode === 'ai' && !gameCopy.isGameOver()) {
         setIsThinking(true);
@@ -261,7 +360,7 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
     if (bestMove) {
       cg.move(bestMove);
       setGame(new Chess(cg.fen()));
-      checkGameOver(cg);
+      checkGameOver(cg, true);
     }
     setIsThinking(false);
   };
@@ -430,98 +529,100 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
 
   if (!mode) {
     return (
+      <>
       <div className="max-w-4xl mx-auto p-4 animate-in fade-in zoom-in duration-300">
         <button onClick={onExit} className="flex items-center gap-2 text-neutral-500 hover:text-neutral-900 mb-6 font-medium">
           <ArrowLeft className="w-5 h-5" /> Trở lại
         </button>
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-neutral-200/50 border border-neutral-100 text-center">
-          <Crown className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <Crown className="w-12 h-12 text-orange-500 mx-auto mb-3" />
           <h2 className="text-2xl sm:text-3xl font-bold font-display tracking-tight text-neutral-900 mb-2">Cờ Vua</h2>
           <p className="text-neutral-500 text-sm sm:text-base mb-6 sm:mb-8">Chọn chế độ chơi để bắt đầu</p>
 
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="bg-indigo-50 p-5 sm:p-6 rounded-2xl text-left border border-indigo-100">
+            <div className="bg-neutral-50 p-5 sm:p-6 rounded-3xl text-left border border-neutral-100">
                <div className="flex items-center gap-3 mb-4">
-                 <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                 <div className="w-9 h-9 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
                    <Brain className="w-4 h-4" />
                  </div>
-                 <h3 className="font-semibold text-indigo-900 text-base">Chơi với Máy</h3>
+                 <h3 className="font-semibold text-neutral-900 text-base">Chơi với Máy</h3>
                </div>
                <div className="space-y-4">
-                 <div className="flex bg-indigo-100/50 p-1 rounded-xl">
+                 <div className="flex bg-neutral-100/50 p-1 rounded-3xl">
                    <button 
                      onClick={() => setAiColor('white')}
-                     className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${aiColor === 'white' ? 'bg-white text-indigo-900 shadow-sm' : 'text-indigo-600 hover:bg-indigo-100/50'}`}
+                     className={`flex-1 py-1.5 text-sm font-medium rounded-3xl transition-all ${aiColor === 'white' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:bg-neutral-100/50'}`}
                    >
                      Màu Trắng
                    </button>
                    <button 
                      onClick={() => setAiColor('black')}
-                     className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${aiColor === 'black' ? 'bg-slate-800 text-white shadow-sm' : 'text-indigo-600 hover:bg-indigo-100/50'}`}
+                     className={`flex-1 py-1.5 text-sm font-medium rounded-3xl transition-all ${aiColor === 'black' ? 'bg-slate-800 text-white shadow-sm' : 'text-neutral-600 hover:bg-neutral-100/50'}`}
                    >
                      Màu Đen
                    </button>
                  </div>
                  <div className="space-y-2">
-                   <button onClick={() => startAIGame('easy', aiColor)} className={`w-full px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-emerald-50 hover:text-emerald-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
+                   <button onClick={() => startAIGame('easy', aiColor)} className={`w-full px-4 py-2.5 rounded-3xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-neutral-50 hover:text-neutral-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
                      <span>Máy tính - Dễ</span>
                    </button>
-                   <button onClick={() => startAIGame('medium', aiColor)} className={`w-full px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-amber-50 hover:text-amber-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
+                   <button onClick={() => startAIGame('medium', aiColor)} className={`w-full px-4 py-2.5 rounded-3xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-orange-50 hover:text-orange-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
                      <span>Máy tính - Trung Bình</span>
                    </button>
-                   <button onClick={() => startAIGame('hard', aiColor)} className={`w-full px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-rose-50 hover:text-rose-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
+                   <button onClick={() => startAIGame('hard', aiColor)} className={`w-full px-4 py-2.5 rounded-3xl font-medium transition-colors shadow-sm text-left flex justify-between items-center text-sm ${aiColor === 'white' ? 'bg-white text-neutral-700 hover:bg-orange-50 hover:text-orange-600 border border-neutral-100' : 'bg-slate-800 text-white border border-slate-700 hover:bg-slate-700'}`}>
                      <span>Máy tính - Khó</span>
                    </button>
                  </div>
                </div>
             </div>
 
-            <div className="bg-sky-50 p-5 sm:p-6 rounded-2xl text-left border border-sky-100 flex flex-col">
+            <div className="bg-neutral-50 p-5 sm:p-6 rounded-3xl text-left border border-neutral-100 flex flex-col">
                <div className="flex items-center gap-3 mb-4">
-                 <div className="w-9 h-9 bg-sky-100 rounded-xl flex items-center justify-center text-sky-600">
+                 <div className="w-9 h-9 bg-neutral-100 rounded-full flex items-center justify-center text-neutral-600">
                    <User className="w-4 h-4" />
                  </div>
-                 <h3 className="font-semibold text-sky-900 text-base">Chơi với Bạn</h3>
+                 <h3 className="font-semibold text-neutral-900 text-base">Chơi với Bạn</h3>
                </div>
                
-               {friends.length === 0 ? (
-                 <p className="text-xs sm:text-sm text-neutral-500 mt-2 bg-white p-3 rounded-xl border border-neutral-100">Bạn chưa có bạn bè nào để chơi cùng.</p>
-               ) : (
-                 <div className="space-y-2 max-h-[260px] overflow-y-auto flex-1 outline-none scrollbar-hide">
-                   {friends.map(f => {
-                     const isPlaying = activeGames[f.friendId] !== undefined;
-                     return (
-                       <button key={f.friendId} onClick={() => startFriendGame(f)} className="w-full bg-white px-4 py-2.5 rounded-xl font-medium text-neutral-700 hover:bg-sky-100 hover:text-sky-700 transition-colors border border-sky-200/50 shadow-sm text-left flex items-center justify-between text-sm group">
-                         <span className="truncate mr-2">{f.displayName || f.email || f.friendId}</span>
-                         {isPlaying ? (
-                           <span className="text-xs bg-emerald-100 text-emerald-600 px-2 py-1 rounded-full animate-pulse">Vào Bàn</span>
-                         ) : (
-                           <span className="text-xs bg-sky-100 text-sky-600 px-2 py-1 rounded-full">Mời</span>
-                         )}
-                       </button>
-                     );
-                   })}
-                 </div>
-               )}
+               <p className="text-sm text-neutral-500 mt-2 bg-white p-3 rounded-3xl border border-neutral-100 text-center col-span-3">
+                 Tạo phòng và chia sẻ mã, hoặc nhập mã để tham gia bàn chơi có sẵn.
+                 <br/><br/>
+                 <button onClick={() => setShowInviteModal(true)} className="px-6 py-2 bg-neutral-600 text-white rounded-3xl font-semibold hover:bg-neutral-700 transition">Vào Sảnh Mời</button>
+               </p>
             </div>
           </div>
         </div>
       </div>
+      {showInviteModal && (
+        <GameInviteModal 
+           user={user}
+           gameName="Cờ Vua Đa Nền Tảng"
+           gameType="chess"
+           maxPlayers={2}
+           onJoin={(players) => {
+               setShowInviteModal(false);
+               const opponentUid = players.find(p => p !== user.uid);
+               if (opponentUid) startFriendGame(opponentUid);
+           }}
+           onCancel={() => setShowInviteModal(false)}
+        />
+      )}
+      </>
     );
   }
 
   return (
     <div className="max-w-[600px] w-full mx-auto p-2 sm:p-4 animate-in fade-in zoom-in duration-300 flex flex-col items-center">
       <div className="flex items-center justify-between mb-4 w-full">
-        <button onClick={() => setMode(null)} className="flex items-center gap-2 text-neutral-500 hover:text-neutral-900 font-medium bg-white px-3 py-1.5 rounded-xl shadow-sm border border-neutral-100 text-sm transition-colors">
+        <button onClick={() => setMode(null)} className="flex items-center gap-2 text-neutral-500 hover:text-neutral-900 font-medium bg-white px-3 py-1.5 rounded-3xl shadow-sm border border-neutral-100 text-sm transition-colors">
           <ArrowLeft className="w-4 h-4" /> Rời bàn
         </button>
-        <div className="bg-white px-3 py-1.5 rounded-xl shadow-sm border border-neutral-100 font-semibold text-neutral-700 text-sm">
+        <div className="bg-white px-3 py-1.5 rounded-3xl shadow-sm border border-neutral-100 font-semibold text-neutral-700 text-sm">
           {mode === 'ai' ? `Máy (${difficulty === 'easy' ? 'Dễ' : difficulty === 'medium' ? 'TB' : 'Khó'})` : selectedFriend?.displayName || 'Bạn'}
         </div>
       </div>
 
-      <div className="bg-neutral-800 p-2 sm:p-5 rounded-2xl sm:rounded-3xl shadow-2xl relative w-full">
+      <div className="bg-neutral-800 p-2 sm:p-5 rounded-3xl sm:rounded-3xl shadow-2xl relative w-full">
          {winner && (
            <div className="absolute inset-0 z-20 bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center">
              <div className="bg-white rounded-3xl p-6 text-center max-w-xs mx-4 transform scale-100 shadow-2xl">
@@ -532,16 +633,16 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
                 <p className="text-neutral-500 text-sm mb-6">Trận đấu đã kết thúc.</p>
                 <div className="space-y-2">
                   {mode === 'friend' && (
-                    <button onClick={restartFriendGame} className="w-full bg-emerald-500 text-white font-semibold py-2.5 rounded-xl hover:bg-emerald-600 transition-colors text-sm">
+                    <button onClick={restartFriendGame} className="w-full bg-neutral-500 text-white font-semibold py-2.5 rounded-3xl hover:bg-neutral-600 transition-colors text-sm">
                       Chơi Lại (Đổi màu)
                     </button>
                   )}
                   {mode === 'ai' && (
-                    <button onClick={() => startAIGame(difficulty, boardOrientation)} className="w-full bg-emerald-500 text-white font-semibold py-2.5 rounded-xl hover:bg-emerald-600 transition-colors text-sm">
+                    <button onClick={() => startAIGame(difficulty, boardOrientation)} className="w-full bg-neutral-500 text-white font-semibold py-2.5 rounded-3xl hover:bg-neutral-600 transition-colors text-sm">
                       Chơi Lại
                     </button>
                   )}
-                  <button onClick={() => setMode(null)} className="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors text-sm">
+                  <button onClick={() => setMode(null)} className="w-full bg-neutral-600 text-white font-semibold py-2.5 rounded-3xl hover:bg-neutral-700 transition-colors text-sm">
                     Về Sảnh
                   </button>
                 </div>
@@ -551,30 +652,51 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
          
          <div className="flex justify-between items-center mb-3 px-1 sm:px-2">
            <div className="flex items-center gap-2 text-white font-medium">
-             <div className="w-7 h-7 bg-neutral-700 rounded-lg flex items-center justify-center">
-               {mode === 'ai' ? <Brain className="w-4 h-4 text-emerald-400" /> : <User className="w-4 h-4 text-sky-400" />}
+             <div className="w-7 h-7 bg-neutral-700 rounded-full flex items-center justify-center">
+               {mode === 'ai' ? <Brain className="w-4 h-4 text-neutral-400" /> : <User className="w-4 h-4 text-neutral-400" />}
              </div>
              <div className="leading-tight">
-               <div className="text-sm font-semibold">{mode === 'ai' ? 'Máy' : selectedFriend?.displayName || 'Đối thủ'}</div>
-               {isThinking && <div className="text-[10px] text-emerald-400 animate-pulse font-normal mt-0.5">Đang suy nghĩ...</div>}
+               <div className="text-sm font-semibold flex items-center gap-2">
+                 {mode === 'ai' ? 'Máy' : selectedFriend?.displayName || 'Đối thủ'}
+                 {mode === 'ai' && <span className="text-[10px] bg-neutral-600 px-1.5 py-0.5 rounded-3xl text-neutral-300">Thua: {scores.opponent}</span>}
+               </div>
+               {isThinking && <div className="text-[10px] text-neutral-400 animate-pulse font-normal mt-0.5">Đang suy nghĩ...</div>}
              </div>
            </div>
            
-           <div className="text-[10px] font-semibold bg-neutral-700 border border-neutral-600 text-neutral-300 px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-sm">
+           <div className="text-[10px] font-semibold bg-neutral-700 border border-neutral-600 text-neutral-300 px-2 py-0.5 rounded-3xl uppercase tracking-wider backdrop-blur-sm">
              {game.turn() === (boardOrientation === 'white' ? 'w' : 'b') ? 'Lượt của bạn' : 'Lượt đối thủ'}
            </div>
          </div>
 
-         <div className="rounded-xl overflow-hidden shadow-2xl bg-[#ebecd0] aspect-square w-full mx-auto select-none">
+         <div className="rounded-3xl overflow-hidden shadow-2xl bg-[#ebecd0] aspect-square w-full mx-auto select-none">
             <Chessboard options={chessboardOptions} />
          </div>
          
-         <div className="flex items-center gap-2 text-white mt-3 px-1 sm:px-2">
-             <div className="w-7 h-7 bg-neutral-700 rounded-lg flex items-center justify-center">
-               <User className="w-4 h-4 text-amber-400" />
+          <div className="flex items-center justify-between text-white mt-3 px-1 sm:px-2">
+             <div className="flex items-center gap-2">
+               <div className="w-7 h-7 bg-neutral-700 rounded-full flex items-center justify-center">
+                 <User className="w-4 h-4 text-orange-400" />
+               </div>
+               <div className="text-sm font-semibold flex items-center gap-2">
+                 Bạn ({boardOrientation === 'white' ? 'Trắng' : 'Đen'})
+                 {mode === 'ai' && <span className="text-[10px] bg-neutral-600 px-1.5 py-0.5 rounded-3xl text-orange-300">Thắng: {scores.you}</span>}
+               </div>
              </div>
-             <div className="text-sm font-semibold">Bạn ({boardOrientation === 'white' ? 'Trắng' : 'Đen'})</div>
-         </div>
+             <button 
+               onClick={handleAskAICoach}
+               disabled={isCoachingMode}
+               className="flex items-center gap-1.5 text-xs bg-neutral-500/20 hover:bg-neutral-500/40 text-neutral-300 px-3 py-1.5 rounded-3xl font-medium transition-colors"
+             >
+               {isCoachingMode ? <span className="animate-pulse">Đang huấn luyện...</span> : <> <Brain className="w-4 h-4" /> Hỏi ý kiến AI </>}
+             </button>
+          </div>
+          {aiCoachMessage && (
+            <div className="mt-4 bg-neutral-900/50 border border-neutral-500/30 rounded-3xl p-3 text-neutral-100 text-sm font-medium">
+              <span className="font-bold text-neutral-400 uppercase text-xs mr-2">Gemma 4 Coach:</span>
+              {aiCoachMessage}
+            </div>
+          )}
       </div>
     </div>
   );

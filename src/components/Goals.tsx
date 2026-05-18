@@ -6,6 +6,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { Target, Plus, Trash2, PiggyBank, Calendar, TrendingUp, Car, Plane, Home, Laptop, Heart, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO } from 'date-fns';
+import { useCurrency } from '../lib/CurrencyContext';
 
 const ICONS = [
   { id: 'PiggyBank', icon: PiggyBank, label: 'Tiết kiệm' },
@@ -18,6 +19,7 @@ const ICONS = [
 ];
 
 export default function Goals() {
+  const { formatMoney, currency } = useCurrency();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newGoal, setNewGoal] = useState({ name: '', targetAmount: '', icon: 'PiggyBank', deadline: '' });
@@ -118,7 +120,7 @@ export default function Goals() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">Số tiền mục tiêu (VNĐ)</label>
+                <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1">Số tiền mục tiêu ({currency})</label>
                 <input 
                   type="number"
                   placeholder="Ví dụ: 50000000"
@@ -136,7 +138,7 @@ export default function Goals() {
                       <button
                         key={iconObj.id}
                         onClick={() => setNewGoal({...newGoal, icon: iconObj.id})}
-                        className={`p-3 rounded-2xl flex items-center justify-center transition-all ${
+                        className={`p-3 rounded-3xl flex items-center justify-center transition-all ${
                           newGoal.icon === iconObj.id 
                             ? 'bg-neutral-900 text-white shadow-md' 
                             : 'bg-neutral-50 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900'
@@ -165,7 +167,7 @@ export default function Goals() {
             <div className="flex gap-4 justify-end pt-4 border-t border-neutral-100">
               <button 
                 onClick={() => setIsAdding(false)} 
-                className="px-6 py-3 rounded-2xl text-neutral-500 font-bold hover:bg-neutral-50 transition-all"
+                className="px-6 py-3 rounded-3xl text-neutral-500 font-bold hover:bg-neutral-50 transition-all"
               >
                 Hủy
               </button>
@@ -199,12 +201,12 @@ export default function Goals() {
               </div>
 
               <div className="flex justify-between items-start mb-6">
-                <div className="w-14 h-14 bg-neutral-50 rounded-2xl flex items-center justify-center text-neutral-900 group-hover:bg-neutral-900 group-hover:text-white transition-all duration-300">
+                <div className="w-14 h-14 bg-neutral-50 rounded-full flex items-center justify-center text-neutral-900 group-hover:bg-neutral-900 group-hover:text-white transition-all duration-300">
                   <GoalIcon className="w-7 h-7" />
                 </div>
                 <button 
                   onClick={() => goal.id && handleDeleteGoal(goal.id)}
-                  className="p-2 text-neutral-300 hover:text-red-500 transition-colors"
+                  className="p-2 text-neutral-300 hover:text-orange-500 transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -219,18 +221,18 @@ export default function Goals() {
               )}
               
               <div className="flex items-end gap-2 mb-6 mt-2">
-                <span className="text-2xl font-mono font-bold text-neutral-900">{goal.currentAmount.toLocaleString()}đ</span>
-                <span className="text-sm text-neutral-400 font-medium mb-1">/ {goal.targetAmount.toLocaleString()}đ</span>
+                <span className="text-2xl font-mono font-bold text-neutral-900">{formatMoney(goal.currentAmount)}</span>
+                <span className="text-sm text-neutral-400 font-medium mb-1">/ {formatMoney(goal.targetAmount)}</span>
               </div>
 
               <div className="space-y-4">
-                <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
+                <div className="h-3 bg-neutral-100 rounded-3xl overflow-hidden">
                   <motion.div 
                     layout
                     initial={{ width: 0 }}
                     animate={{ width: `${percent}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
-                    className={`h-full ${percent >= 100 ? 'bg-green-500' : 'bg-neutral-900'} rounded-full`}
+                    className={`h-full ${percent >= 100 ? 'bg-neutral-500' : 'bg-neutral-900'} rounded-3xl`}
                   />
                 </div>
                 <div className="flex justify-between items-center">
@@ -241,29 +243,29 @@ export default function Goals() {
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     <button 
                       onClick={() => handleAddMoney(goal, 100000)}
-                      className="text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                      className="text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-3xl flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-green-500" /> +100k
+                      <TrendingUp className="w-3.5 h-3.5 text-neutral-500" /> +100k
                     </button>
                     <button 
                       onClick={() => handleAddMoney(goal, 500000)}
-                      className="text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                      className="text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-3xl flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-green-500" /> +500k
+                      <TrendingUp className="w-3.5 h-3.5 text-neutral-500" /> +500k
                     </button>
                     <button 
                       onClick={() => handleAddMoney(goal, 1000000)}
-                      className="col-span-2 text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                      className="col-span-2 text-xs font-bold text-neutral-900 bg-neutral-50 hover:bg-neutral-100 py-2.5 rounded-3xl flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <TrendingUp className="w-3.5 h-3.5 text-green-500" /> +1 Triệu
+                      <TrendingUp className="w-3.5 h-3.5 text-neutral-500" /> +1 Triệu
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-4 p-4 bg-green-50 rounded-2xl border border-green-100 flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shadow-sm">
+                  <div className="mt-4 p-4 bg-neutral-50 rounded-3xl border border-neutral-100 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-neutral-500 rounded-full bg-neutral-500 flex items-center justify-center shadow-sm">
                         <Plus className="w-4 h-4 text-white" />
                     </div>
-                    <span className="text-sm font-semibold text-green-700">Tuyệt vời! Mục tiêu hoàn tất.</span>
+                    <span className="text-sm font-semibold text-neutral-700">Tuyệt vời! Mục tiêu hoàn tất.</span>
                   </div>
                 )}
               </div>
@@ -272,7 +274,7 @@ export default function Goals() {
         })}
 
         {goals.length === 0 && !isAdding && (
-          <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-dashed border-neutral-200">
+          <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-neutral-200">
             <PiggyBank className="w-16 h-16 text-neutral-200 mx-auto mb-4" />
             <p className="text-neutral-400 font-display italic text-lg">Bắt đầu tiết kiệm cho tương lai ngay hôm nay.</p>
           </div>

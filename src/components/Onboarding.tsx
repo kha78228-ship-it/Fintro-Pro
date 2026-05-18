@@ -14,19 +14,19 @@ const slides: Slide[] = [
     title: "Chào mừng đến với Fintro ✕ Couple",
     description: "Nơi vun đắp tình yêu và quản lý tài chính cùng người ấy.",
     icon: <Heart className="w-20 h-20 text-white" />,
-    color: "bg-gradient-to-br from-rose-500 to-pink-500"
+    color: "bg-neo-bg"
   },
   {
     title: "Tài chính thông minh",
     description: "Theo dõi chi tiêu, lập ngân sách và đạt mục tiêu tài chính cùng nhau.",
     icon: <Wallet className="w-20 h-20 text-white" />,
-    color: "bg-gradient-to-tr from-indigo-600 to-indigo-500"
+    color: "bg-neo-bg"
   },
   {
     title: "Kết nối yêu thương",
     description: "Trò chuyện, chia sẻ kỷ niệm và khám phá những điều thú vị về nhau.",
     icon: <Users className="w-20 h-20 text-white" />,
-    color: "bg-gradient-to-br from-teal-500 to-emerald-500"
+    color: "bg-neo-bg"
   }
 ];
 
@@ -56,7 +56,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           transition={{ duration: 0.3 }}
           className="flex-1 flex flex-col items-center justify-center p-8 text-center"
         >
-          <div className={`w-40 h-40 rounded-3xl ${slides[currentSlide].color} flex items-center justify-center mb-10 shadow-2xl shadow-neutral-300`}>
+          <div className={`w-40 h-40 rounded-full ${slides[currentSlide].color} flex items-center justify-center mb-10 shadow-2xl shadow-neutral-300`}>
             {slides[currentSlide].icon}
           </div>
           <h2 className="text-3xl font-display font-medium text-neutral-900 mb-4">{slides[currentSlide].title}</h2>
@@ -72,7 +72,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         </div>
         <button 
           onClick={nextSlide}
-          className="bg-neutral-900 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2 hover:bg-neutral-800 transition-colors"
+          className="bg-neutral-900 text-white px-8 py-3.5 rounded-3xl font-bold flex items-center gap-2 hover:bg-neutral-800 transition-colors"
         >
           {currentSlide === slides.length - 1 ? 'Bắt đầu' : 'Tiếp theo'}
           <ChevronRight className="w-5 h-5" />

@@ -1,0 +1,19 @@
+984:            <button
+993:              <button
+1075:            <button
+1081:            <button
+1091:            <button className="bg-neo-dark text-neo-light px-6 py-3 text-[10px] uppercase font-bold tracking-[0.2em] hover:bg-neo-orange transition-colors hidden sm:block">
+1314:                <button
+1320:                <button
+1326:                <button
+1485:            <button
+1533:            <button
+1540:            <button
+1547:            <button
+1554:            <button
+1888:            <button
+1956:              <button
+1981:                <button
+2075:    <button
+2109:    <button
+2150:    <button

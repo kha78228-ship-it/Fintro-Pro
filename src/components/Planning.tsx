@@ -13,16 +13,16 @@ export default function Planning({ transactions }: PlanningProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex bg-white/50 backdrop-blur border border-neutral-200/50 p-1 rounded-2xl w-fit mx-auto sm:mx-0 shadow-sm">
+      <div className="flex bg-white/50 backdrop-blur border border-neutral-200/50 p-1 rounded-3xl w-fit mx-auto sm:mx-0 shadow-sm">
         <button
           onClick={() => setActiveTab('budgets')}
-          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'budgets' ? 'bg-neutral-900 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-800'}`}
+          className={`px-6 py-2.5 rounded-3xl text-sm font-bold transition-all ${activeTab === 'budgets' ? 'bg-neutral-900 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-800'}`}
         >
           Ngân sách
         </button>
         <button
           onClick={() => setActiveTab('goals')}
-          className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'goals' ? 'bg-neutral-900 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-800'}`}
+          className={`px-6 py-2.5 rounded-3xl text-sm font-bold transition-all ${activeTab === 'goals' ? 'bg-neutral-900 text-white shadow-md' : 'text-neutral-500 hover:text-neutral-800'}`}
         >
           Mục tiêu
         </button>

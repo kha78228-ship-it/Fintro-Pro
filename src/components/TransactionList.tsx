@@ -4,8 +4,9 @@ import { DEFAULT_CATEGORIES } from '../lib/categories';
 import * as LucideIcons from 'lucide-react';
 import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ArrowUpDown, ArrowDown, ArrowUp, CalendarDays, Trash2, Share2, Check, X, AlertTriangle } from 'lucide-react';
+import { ArrowUpDown, ArrowDown, ArrowUp, CalendarDays, Trash2, Share2, Check, X, AlertTriangle, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useCurrency } from '../lib/CurrencyContext';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -17,11 +18,19 @@ type SortField = 'date' | 'amount' | 'category';
 type SortDirection = 'asc' | 'desc';
 
 export default function TransactionList({ transactions, onDelete, hideHeaderActions }: TransactionListProps) {
+  const { formatMoney } = useCurrency();
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<TransactionType | 'ALL'>('ALL');
+  const [filterCategory, setFilterCategory] = useState<string>('ALL');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -38,9 +47,38 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
     return sortDirection === 'desc' ? <ArrowDown className="w-3 h-3 text-neutral-900" /> : <ArrowUp className="w-3 h-3 text-neutral-900" />;
   };
 
-  // Base sorted transactions
+  // Processed (filtered and sorted) transactions
   const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => {
+    let filtered = transactions.filter(t => {
+      // 1. Search Query
+      if (searchQuery) {
+        const catName = DEFAULT_CATEGORIES.find(c => c.id === t.category)?.name || '';
+        const searchLower = searchQuery.toLowerCase();
+        if (!t.description?.toLowerCase().includes(searchLower) && !catName.toLowerCase().includes(searchLower)) {
+          return false;
+        }
+      }
+      
+      // 2. Type Filter
+      if (filterType !== 'ALL' && t.type !== filterType) return false;
+      
+      // 3. Category Filter
+      if (filterCategory !== 'ALL' && t.category !== filterCategory) return false;
+
+      // 4. Date Filter
+      if (filterStartDate) {
+         if (new Date(t.date) < new Date(filterStartDate)) return false;
+      }
+      if (filterEndDate) {
+         const end = new Date(filterEndDate);
+         end.setHours(23, 59, 59, 999);
+         if (new Date(t.date) > end) return false;
+      }
+      
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
       let comparison = 0;
       
       if (sortField === 'date') {
@@ -55,7 +93,7 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [transactions, sortField, sortDirection]);
+  }, [transactions, sortField, sortDirection, searchQuery, filterType, filterCategory, filterStartDate, filterEndDate]);
 
   // Total pages based on exactly 10 transactions per page
   const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage);
@@ -121,15 +159,19 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
 
     return (
       <motion.div 
+        layout
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
         transition={{ delay: idx * 0.05 }}
         key={t.id} 
-        className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-2xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60"
+        className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60 shadow-sm hover:shadow-md cursor-pointer"
       >
         <div className="flex items-start sm:items-center gap-3">
-          <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center transition-colors shrink-0 ${
-            t.type === TransactionType.INCOME ? 'bg-green-50/50 text-green-600' : 'bg-red-50 text-red-500 border border-red-100/50'
+          <div className={`w-11 h-11 rounded-full flex flex-col items-center justify-center transition-colors shrink-0 ${
+            t.type === TransactionType.INCOME ? 'bg-neutral-50/50 text-neutral-600' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
           }`}>
             <IconComponent className="w-5 h-5" />
           </div>
@@ -137,27 +179,36 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
             <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5">{t.description || categoryObj?.name}</div>
             <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 font-medium">
               <span className="font-mono tracking-tight text-neutral-500">{format(parseISO(t.date), 'HH:mm')}</span>
-              <span className="w-0.5 h-0.5 rounded-full bg-neutral-300"></span>
+              <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
               <span className="truncate">{categoryObj?.name}</span>
-              <span className="w-0.5 h-0.5 rounded-full bg-neutral-300"></span>
-              <span className={`px-1.5 py-0.5 rounded-full ${t.status === TransactionStatus.COMPLETED ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+              <span className={`px-1.5 py-0.5 rounded-3xl ${t.status === TransactionStatus.COMPLETED ? 'bg-neutral-100 text-neutral-700' : 'bg-orange-100 text-orange-700'}`}>
                 {t.status === TransactionStatus.COMPLETED ? 'Đã hoàn thành' : 'Chờ xử lý'}
               </span>
+              {t.isRecurring && t.recurringPeriod && t.recurringPeriod !== 'none' && (
+                 <>
+                   <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+                   <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-3xl bg-neutral-50 text-neutral-600">
+                     <LucideIcons.Repeat className="w-2.5 h-2.5" />
+                     {t.recurringPeriod === 'daily' ? 'Hàng ngày' : t.recurringPeriod === 'weekly' ? 'Hàng tuần' : t.recurringPeriod === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
+                   </span>
+                 </>
+              )}
             </div>
           </div>
         </div>
         <div className="flex items-center justify-end mt-1 sm:mt-0 pl-14 sm:pl-0 gap-3">
           <div className={`text-base font-bold font-mono tracking-tight text-right ${
-            t.type === TransactionType.INCOME ? 'text-green-600' : 'text-red-500'
+            t.type === TransactionType.INCOME ? 'text-neutral-600' : 'text-orange-500'
           }`}>
-            {t.type === TransactionType.INCOME ? '+' : '-'}{t.amount.toLocaleString()}đ
+            {t.type === TransactionType.INCOME ? '+' : '-'}{formatMoney(t.amount)}
           </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               const catName = categoryObj?.name || 'Khác';
               const sign = t.type === TransactionType.INCOME ? '+' : '-';
-              const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${t.amount.toLocaleString()}đ\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
+              const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${formatMoney(t.amount)}\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
               
               if (navigator.share) {
                 navigator.share({
@@ -170,7 +221,7 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                 }).catch(console.error);
               }
             }}
-            className="p-1.5 text-neutral-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+            className="p-1.5 text-neutral-400 hover:text-neutral-500 hover:bg-neutral-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100"
             title="Chia sẻ"
           >
             <Share2 className="w-4 h-4" />
@@ -181,7 +232,7 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                 e.stopPropagation();
                 setConfirmDeleteId(t.id);
               }}
-              className="p-1.5 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+              className="p-1.5 text-neutral-400 hover:text-orange-500 hover:bg-orange-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
               title="Xóa giao dịch"
             >
               <Trash2 className="w-4 h-4" />
@@ -199,16 +250,16 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl"
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl"
           >
-             <div className="flex justify-center mb-4 text-red-500">
+             <div className="flex justify-center mb-4 text-orange-500">
                <AlertTriangle className="w-12 h-12" />
              </div>
              <h3 className="text-lg font-bold text-center mb-2">Xác nhận xóa?</h3>
              <p className="text-sm text-neutral-500 text-center mb-6">Bạn có chắc chắn muốn xóa giao dịch này? Hành động này không thể hoàn tác.</p>
              <div className="flex gap-3">
-               <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-2 bg-neutral-100 rounded-xl font-bold hover:bg-neutral-200 transition-colors">Hủy</button>
-               <button onClick={() => { onDelete?.(confirmDeleteId); setConfirmDeleteId(null); }} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors">Xác nhận Xóa</button>
+               <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-2 bg-neutral-100 rounded-3xl font-bold hover:bg-neutral-200 transition-colors">Hủy</button>
+               <button onClick={() => { onDelete?.(confirmDeleteId); setConfirmDeleteId(null); }} className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-3xl font-bold hover:bg-orange-700 transition-colors">Xác nhận Xóa</button>
              </div>
           </motion.div>
         </div>
@@ -219,28 +270,126 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
            <p className="text-sm text-neutral-400 mt-1">Biến động thu chi theo ngày</p>
         </div>
         {!hideHeaderActions && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
-            <button 
-              onClick={() => handleSort('date')}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${sortField === 'date' ? 'bg-neutral-50 border-neutral-200 text-neutral-900' : 'border-transparent text-neutral-500 hover:bg-neutral-50'}`}
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input 
+                type="text" 
+                placeholder="Tìm kiếm giao dịch..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4 py-2 bg-neutral-50 border border-neutral-200 rounded-3xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all w-full sm:w-64"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`p-2 rounded-full transition-colors border ${showFilters || filterType !== 'ALL' || filterCategory !== 'ALL' || filterStartDate || filterEndDate ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100'}`}
             >
-              Ngày <SortIcon field="date" />
-            </button>
-            <button 
-              onClick={() => handleSort('amount')}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${sortField === 'amount' ? 'bg-neutral-50 border-neutral-200 text-neutral-900' : 'border-transparent text-neutral-500 hover:bg-neutral-50'}`}
-            >
-              Số tiền <SortIcon field="amount" />
-            </button>
-            <button 
-              onClick={() => handleSort('category')}
-              className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${sortField === 'category' ? 'bg-neutral-50 border-neutral-200 text-neutral-900' : 'border-transparent text-neutral-500 hover:bg-neutral-50'}`}
-            >
-              Danh mục <SortIcon field="category" />
+              <Filter className="w-4 h-4" />
             </button>
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {showFilters && !hideHeaderActions && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-neutral-50 rounded-3xl p-4 mb-6 border border-neutral-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-neutral-700">Bộ lọc & Sắp xếp</h4>
+                <button 
+                  onClick={() => {
+                    setFilterType('ALL');
+                    setFilterCategory('ALL');
+                    setFilterStartDate('');
+                    setFilterEndDate('');
+                    setSearchQuery('');
+                  }}
+                  className="text-xs font-semibold text-neutral-500 hover:text-neutral-900"
+                >
+                  Xóa bộ lọc
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-neutral-500">Loại giao dịch</label>
+                  <select 
+                    value={filterType} 
+                    onChange={(e) => setFilterType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                  >
+                    <option value="ALL">Tất cả</option>
+                    <option value={TransactionType.INCOME}>Thu nhập</option>
+                    <option value={TransactionType.EXPENSE}>Chi tiêu</option>
+                  </select>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-neutral-500">Danh mục</label>
+                  <select 
+                    value={filterCategory} 
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                  >
+                    <option value="ALL">Tất cả</option>
+                    {DEFAULT_CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-neutral-500">Từ ngày</label>
+                  <input 
+                    type="date" 
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-neutral-500">Đến ngày</label>
+                  <input 
+                    type="date" 
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 hide-scrollbar border-t border-neutral-200">
+                <span className="text-sm font-semibold text-neutral-700 mr-2 whitespace-nowrap">Sắp xếp theo:</span>
+                <button 
+                  onClick={() => handleSort('date')}
+                  className={`group flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-3xl border text-xs font-semibold transition-all ${sortField === 'date' ? 'bg-white border-neutral-300 text-neutral-900 shadow-sm' : 'border-transparent text-neutral-500 hover:bg-white hover:border-neutral-200'}`}
+                >
+                  Ngày <SortIcon field="date" />
+                </button>
+                <button 
+                  onClick={() => handleSort('amount')}
+                  className={`group flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-3xl border text-xs font-semibold transition-all ${sortField === 'amount' ? 'bg-white border-neutral-300 text-neutral-900 shadow-sm' : 'border-transparent text-neutral-500 hover:bg-white hover:border-neutral-200'}`}
+                >
+                  Số tiền <SortIcon field="amount" />
+                </button>
+                <button 
+                  onClick={() => handleSort('category')}
+                  className={`group flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-3xl border text-xs font-semibold transition-all ${sortField === 'category' ? 'bg-white border-neutral-300 text-neutral-900 shadow-sm' : 'border-transparent text-neutral-500 hover:bg-white hover:border-neutral-200'}`}
+                >
+                  Danh mục <SortIcon field="category" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence mode="popLayout">
         <div className="space-y-4">
@@ -260,18 +409,18 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                   >
                     <div className="flex items-center justify-between py-2 mb-3">
                        <div className="flex items-center gap-4">
-                         <div className="w-14 h-14 bg-neutral-50 rounded-2xl flex flex-col items-center justify-center shrink-0">
+                         <div className="w-14 h-14 bg-neutral-50 rounded-full flex flex-col items-center justify-center shrink-0">
                            <span className="text-xl font-bold text-neutral-900 leading-none mb-1">{format(group.date, 'dd')}</span>
                            <span className="text-[11px] font-medium text-neutral-500 leading-none">{format(group.date, 'yyyy')}</span>
                          </div>
                          <div className="flex flex-col gap-1">
                             <div className="text-xs font-medium text-neutral-500 flex items-center gap-3">
                                <span className="w-6">Thu</span>
-                               <span className="text-green-600 font-mono tracking-tight font-semibold">+{group.totalIncome.toLocaleString()}đ</span>
+                               <span className="text-neutral-600 font-mono tracking-tight font-semibold">+{formatMoney(group.totalIncome)}</span>
                             </div>
                             <div className="text-xs font-medium text-neutral-500 flex items-center gap-3">
                                <span className="w-6">Chi</span>
-                               <span className="text-red-500 font-mono tracking-tight font-semibold">-{group.totalExpense.toLocaleString()}đ</span>
+                               <span className="text-orange-500 font-mono tracking-tight font-semibold">-{formatMoney(group.totalExpense)}</span>
                             </div>
                          </div>
                        </div>
@@ -280,7 +429,7 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                          <div className={`text-sm font-mono font-bold tracking-tight ${
                            (group.totalIncome - group.totalExpense) < 0 ? 'text-[#ff4e42]' : 'text-[#0088cc]'
                          }`}>
-                           {(group.totalIncome - group.totalExpense).toLocaleString()}đ
+                           {formatMoney(group.totalIncome - group.totalExpense)}
                          </div>
                        </div>
                     </div>
@@ -299,13 +448,13 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                     <button 
                         onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                         disabled={currentPage === 1}
-                        className="px-4 py-2 text-sm font-bold text-neutral-600 bg-neutral-50 rounded-xl hover:bg-neutral-100 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-bold text-neutral-600 bg-neutral-50 rounded-3xl hover:bg-neutral-100 disabled:opacity-50 active:scale-95 transition-all disabled:active:scale-100"
                     >Trước</button>
                     <span className="text-sm font-medium text-neutral-400">Trang {currentPage} / {totalPages}</span>
                     <button 
                         onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                         disabled={currentPage === totalPages}
-                        className="px-4 py-2 text-sm font-bold text-neutral-600 bg-neutral-50 rounded-xl hover:bg-neutral-100 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-bold text-neutral-600 bg-neutral-50 rounded-3xl hover:bg-neutral-100 disabled:opacity-50 active:scale-95 transition-all disabled:active:scale-100"
                     >Sau</button>
                 </div>
               )}

@@ -17,6 +17,8 @@ export interface Transaction {
   description: string;
   date: string; // ISO string
   userId: string;
+  isRecurring?: boolean;
+  recurringPeriod?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'none';
 }
 
 export interface Budget {

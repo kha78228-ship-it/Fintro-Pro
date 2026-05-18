@@ -18,12 +18,12 @@ interface NoteItem {
 }
 
 const ICON_OPTIONS = [
-  { id: 'shirt', icon: <Shirt className="w-5 h-5 text-indigo-500" />, label: 'Size', color: 'bg-indigo-50 text-indigo-500 border-indigo-200' },
-  { id: 'gift', icon: <Gift className="w-5 h-5 text-pink-500" />, label: 'Quà tặng', color: 'bg-pink-50 text-pink-500 border-pink-200' },
-  { id: 'cake', icon: <Cake className="w-5 h-5 text-amber-500" />, label: 'Đồ ăn', color: 'bg-amber-50 text-amber-500 border-amber-200' },
-  { id: 'calendar', icon: <CalendarHeart className="w-5 h-5 text-rose-500" />, label: 'Ngày tháng', color: 'bg-rose-50 text-rose-500 border-rose-200' },
+  { id: 'shirt', icon: <Shirt className="w-5 h-5 text-neutral-500" />, label: 'Size', color: 'bg-neutral-50 text-neutral-500 border-neutral-200' },
+  { id: 'gift', icon: <Gift className="w-5 h-5 text-orange-500" />, label: 'Quà tặng', color: 'bg-orange-50 text-orange-500 border-orange-200' },
+  { id: 'cake', icon: <Cake className="w-5 h-5 text-orange-500" />, label: 'Đồ ăn', color: 'bg-orange-50 text-orange-500 border-orange-200' },
+  { id: 'calendar', icon: <CalendarHeart className="w-5 h-5 text-orange-500" />, label: 'Ngày tháng', color: 'bg-orange-50 text-orange-500 border-orange-200' },
   { id: 'star', icon: <Star className="w-5 h-5 text-yellow-500" />, label: 'Sở thích', color: 'bg-yellow-50 text-yellow-500 border-yellow-200' },
-  { id: 'heart', icon: <Heart className="w-5 h-5 text-red-500" />, label: 'Khác', color: 'bg-red-50 text-red-500 border-red-200' },
+  { id: 'heart', icon: <Heart className="w-5 h-5 text-orange-500" />, label: 'Khác', color: 'bg-orange-50 text-orange-500 border-orange-200' },
 ];
 
 export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
@@ -96,8 +96,8 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
     <div className="space-y-8 max-w-3xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-neutral-100">
         <div className="text-center sm:text-left">
-          <h2 className="text-2xl font-display font-bold text-sky-600 tracking-tight flex items-center justify-center sm:justify-start gap-3">
-            <Bookmark className="w-8 h-8 fill-sky-100" />
+          <h2 className="text-2xl font-display font-bold text-neutral-600 tracking-tight flex items-center justify-center sm:justify-start gap-3">
+            <Bookmark className="w-8 h-8 fill-neutral-100" />
             Forget-Me-Nots
           </h2>
           <p className="text-sm text-neutral-500 mt-1">Lưu trữ các tiểu tiết quan trọng của người ấy để trở nên tinh tế hơn.</p>
@@ -105,7 +105,7 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
         {!isAdding && (
           <button 
             onClick={() => setIsAdding(true)}
-            className="flex items-center gap-2 bg-sky-600 text-white font-bold px-5 py-3 rounded-xl shadow-md hover:bg-sky-700 transition-colors"
+            className="flex items-center gap-2 bg-neutral-600 text-white font-bold px-5 py-3 rounded-3xl shadow-md hover:bg-neutral-700 transition-colors"
           >
             <Plus className="w-5 h-5" /> Thêm ghi chú
           </button>
@@ -119,13 +119,13 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             onSubmit={handleAdd}
-            className="bg-sky-50/50 p-6 rounded-3xl border border-sky-100/50 shadow-sm overflow-hidden"
+            className="bg-neutral-50/50 p-6 rounded-3xl border border-neutral-100/50 shadow-sm overflow-hidden"
           >
-            <h3 className="font-bold text-sky-800 mb-4">Thêm tiểu tiết mới</h3>
+            <h3 className="font-bold text-neutral-800 mb-4">Thêm tiểu tiết mới</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-sky-700 mb-1.5 uppercase tracking-wide">Tiêu đề (Vd: Cỡ giày, Dị ứng...)</label>
+                  <label className="block text-xs font-bold text-neutral-700 mb-1.5 uppercase tracking-wide">Tiêu đề (Vd: Cỡ giày, Dị ứng...)</label>
                   <input
                     type="text"
                     value={newTitle}
@@ -133,33 +133,33 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
                     required
                     maxLength={30}
                     placeholder="Sở thích nhạc..."
-                    className="w-full bg-white border border-sky-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-sky-500 outline-none transition-all placeholder:text-neutral-300"
+                    className="w-full bg-white border border-neutral-200 rounded-3xl px-4 py-3 text-sm focus:ring-2 focus:ring-neutral-500 outline-none transition-all placeholder:text-neutral-300"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-sky-700 mb-1.5 uppercase tracking-wide">Nội dung</label>
+                  <label className="block text-xs font-bold text-neutral-700 mb-1.5 uppercase tracking-wide">Nội dung</label>
                   <input
                     type="text"
                     value={newValue}
                     onChange={(e) => setNewValue(e.target.value)}
                     required
                     placeholder="Pop ballad, Lofi..."
-                    className="w-full bg-white border border-sky-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-sky-500 outline-none transition-all placeholder:text-neutral-300"
+                    className="w-full bg-white border border-neutral-200 rounded-3xl px-4 py-3 text-sm focus:ring-2 focus:ring-neutral-500 outline-none transition-all placeholder:text-neutral-300"
                   />
                 </div>
               </div>
               
               <div>
-                <label className="block text-xs font-bold text-sky-700 mb-2 uppercase tracking-wide">Chọn biểu tượng</label>
+                <label className="block text-xs font-bold text-neutral-700 mb-2 uppercase tracking-wide">Chọn biểu tượng</label>
                 <div className="flex flex-wrap gap-2">
                   {ICON_OPTIONS.map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
                       onClick={() => setNewIconType(opt.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all border ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-3xl text-sm transition-all border ${
                         newIconType === opt.id 
-                          ? `${opt.color} ring-2 ring-offset-1 ring-sky-400` 
+                          ? `${opt.color} ring-2 ring-offset-1 ring-neutral-400` 
                           : 'bg-white text-neutral-500 border-neutral-200 hover:bg-neutral-50'
                       }`}
                     >
@@ -170,18 +170,18 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-sky-100">
+              <div className="flex justify-end gap-3 pt-4 border-t border-neutral-100">
                 <button
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="px-5 py-2.5 rounded-xl font-bold text-sky-700 hover:bg-sky-100 transition-colors"
+                  className="px-5 py-2.5 rounded-3xl font-bold text-neutral-700 hover:bg-neutral-100 transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !newTitle.trim() || !newValue.trim()}
-                  className="px-5 py-2.5 rounded-xl font-bold bg-sky-600 text-white hover:bg-sky-700 shadow-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-3xl font-bold bg-neutral-600 text-white hover:bg-neutral-700 shadow-md transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading ? 'Đang lưu...' : (
                     <>
@@ -209,9 +209,9 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.05 }}
-              className="bg-white p-5 rounded-2xl border border-neutral-100 shadow-sm flex items-center gap-4 group cursor-pointer hover:border-sky-300 hover:shadow-md transition-all relative overflow-hidden"
+              className="bg-white p-5 rounded-3xl border border-neutral-100 shadow-sm flex items-center gap-4 group cursor-pointer hover:border-neutral-300 hover:shadow-md transition-all relative overflow-hidden"
             >
-              <div className="w-12 h-12 bg-neutral-50 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-neutral-50 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                 {getIconElement(item.iconType)}
               </div>
               <div className="flex-1 pr-8">
@@ -223,7 +223,7 @@ export default function ForgetMeNots({ user }: ForgetMeNotsProps) {
                   e.stopPropagation();
                   handleDelete(item.id);
                 }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-xl bg-red-50 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100"
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-orange-50 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-100"
                 title="Xóa ghi chú"
               >
                 <Trash2 className="w-4 h-4" />

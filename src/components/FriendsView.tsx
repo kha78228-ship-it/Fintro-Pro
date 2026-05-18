@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Check, Copy, UserMinus, MessageCircle, Send, X, PhoneCall, Image as ImageIcon, Smile, Video as VideoIcon, Paperclip, Loader2, Heart, Mic, Square, Trash2 } from 'lucide-react';
-import { db, storage } from '../lib/firebase';
-import { doc, setDoc, deleteDoc, collection, query, onSnapshot, serverTimestamp, orderBy, addDoc, getDoc, getDocs, where } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { Users, Check, Copy, UserMinus, MessageCircle, Send, X, PhoneCall, Smile, Loader2, Heart, Mic, Square, Trash2 } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { doc, setDoc, deleteDoc, collection, query, onSnapshot, serverTimestamp, orderBy, addDoc, getDoc, getDocs, where, deleteField } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import AIAvatar from './AIAvatar';
 import EmojiPicker from 'emoji-picker-react';
@@ -37,6 +36,8 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
   const [showBubbleNoteModal, setShowBubbleNoteModal] = useState(false);
   const [bubbleNoteDraft, setBubbleNoteDraft] = useState('');
   const [bubbleVisibleToDraft, setBubbleVisibleToDraft] = useState<string[]>(['all']);
+
+  const [activeTab, setActiveTab] = useState<'friends' | 'groups' | 'requests'>('friends');
 
   // Group Chats listener
   useEffect(() => {
@@ -103,8 +104,10 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
   const [newMessage, setNewMessage] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
+  const typingTimeoutRef = useRef<any>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -206,7 +209,19 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
       handleFirestoreError(error, OperationType.LIST, `chats/${chatId}/messages`);
     });
     
-    return () => unsubscribe();
+    const chatDocUnsubscribe = onSnapshot(doc(db, 'chats', chatId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setTypingStatus(data.typing || {});
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `chats/${chatId}`);
+    });
+    
+    return () => {
+      unsubscribe();
+      chatDocUnsubscribe();
+    };
   }, [user, selectedFriend, selectedGroupChat]);
 
   const handleCopyId = () => {
@@ -377,6 +392,48 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
     }
   };
 
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    
+    if (!user) return;
+    const { chatId } = getChatIdInfo();
+    if (!chatId) return;
+
+    if (e.target.value.trim() === '') {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDoc(doc(db, 'chats', chatId), {
+        typing: {
+          [user.uid]: false
+        }
+      }, { merge: true }).catch(err => console.error("Typing status error:", err));
+      return;
+    }
+
+    // Set typing to true
+    setDoc(doc(db, 'chats', chatId), {
+      typing: {
+        [user.uid]: true
+      }
+    }, { merge: true }).catch(err => console.error("Typing status error:", err));
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Clear typing after 2 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      setDoc(doc(db, 'chats', chatId), {
+        typing: {
+          [user.uid]: false
+        }
+      }, { merge: true }).catch(err => console.error("Typing status error:", err));
+      typingTimeoutRef.current = null;
+    }, 2000);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user || (!selectedFriend && !selectedGroupChat)) return;
@@ -407,7 +464,10 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
         participants,
         lastMessage: text,
         lastSenderId: user.uid,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        typing: {
+          [user.uid]: false
+        }
       }, { merge: true });
       
     } catch (error) {
@@ -460,24 +520,13 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         
         setIsUploading(true);
-        const fileName = `${Date.now()}_voice.webm`;
-        const storageRef = ref(storage, `chats/${chatId}/${fileName}`);
-        
-        const uploadTask = uploadBytesResumable(storageRef, audioBlob);
-        
-        uploadTask.on('state_changed', 
-          (snapshot) => {}, 
-          (error) => {
-            console.error("Upload error", error);
-            setIsUploading(false);
-            alert("Lỗi tải lên file ghi âm.");
-          }, 
-          async () => {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        try {
+            const { blobToBase64 } = await import('../lib/fileUtils');
+            const base64Audio = await blobToBase64(audioBlob);
             
             await addDoc(collection(db, `chats/${chatId}/messages`), {
               text: '[Tin nhắn thoại]',
-              fileUrl: downloadURL,
+              fileUrl: base64Audio,
               fileType: 'audio',
               senderId: user.uid,
               timestamp: serverTimestamp()
@@ -487,12 +536,17 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
               participants,
               lastMessage: 'Đã gửi tin nhắn thoại 🎤',
               lastSenderId: user.uid,
-              updatedAt: serverTimestamp()
+              updatedAt: serverTimestamp(),
+              typing: {
+                [user.uid]: false
+              }
             }, { merge: true });
-            
+        } catch (error) {
+            console.error("Upload error", error);
+            alert("Lỗi lưu tin nhắn thoại.");
+        } finally {
             setIsUploading(false);
-          }
-        );
+        }
       };
 
       mediaRecorderRef.current.start();
@@ -504,69 +558,6 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
     } catch (error) {
       console.error("Error accessing microphone", error);
       alert("Không thể truy cập microphone. Vui lòng cấp quyền.");
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user || (!selectedFriend && !selectedGroupChat)) return;
-
-    if (file.size > 20 * 1024 * 1024) {
-      alert("File quá lớn! Vui lòng chọn file nhỏ hơn 20MB.");
-      return;
-    }
-
-    let chatId = '';
-    let participants: string[] = [];
-    if (selectedFriend) {
-      participants = [user.uid, selectedFriend.friendId].sort();
-      chatId = `${participants[0]}_${participants[1]}`;
-    } else if (selectedGroupChat) {
-      chatId = selectedGroupChat.id;
-      participants = selectedGroupChat.participants;
-    }
-
-    try {
-      setIsUploading(true);
-      const fileExtension = file.name.split('.').pop() || 'tmp';
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExtension}`;
-      const storageRef = ref(storage, `chats/${chatId}/${fileName}`);
-      
-      const uploadTask = uploadBytesResumable(storageRef, file);
-      
-      uploadTask.on('state_changed', 
-        (snapshot) => {}, 
-        (error) => {
-          console.error("Upload error", error);
-          setIsUploading(false);
-          alert("Lỗi tải lên file. Có thể chưa được cấp quyền Storage.");
-        }, 
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          const isVideo = file.type.startsWith('video/');
-          
-          await addDoc(collection(db, `chats/${chatId}/messages`), {
-            text: isVideo ? '[Video]' : '[Hình ảnh]',
-            fileUrl: downloadURL,
-            fileType: isVideo ? 'video' : 'image',
-            senderId: user.uid,
-            timestamp: serverTimestamp()
-          });
-          
-          await setDoc(doc(db, 'chats', chatId), {
-            participants,
-            lastMessage: isVideo ? 'Đã gửi một video 🎬' : 'Đã gửi một hình ảnh 📸',
-            lastSenderId: user.uid,
-            updatedAt: serverTimestamp()
-          }, { merge: true });
-          
-          setIsUploading(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      setIsUploading(false);
     }
   };
 
@@ -585,16 +576,16 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
         animate={{ x: 0, opacity: 1 }} 
         exit={{ x: '100%', opacity: 0 }} 
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="w-full max-w-md bg-white h-full relative z-10 flex flex-col shadow-2xl rounded-l-3xl overflow-hidden"
+        className="w-full max-w-md bg-white h-full relative z-10 flex flex-col shadow-2xl rounded-3xl overflow-hidden"
       >
-        <div className="p-4 sm:p-6 border-b border-neutral-100 flex items-center justify-between bg-sky-50 shrink-0">
+        <div className="p-4 sm:p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50 shrink-0">
           <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-sky-600" />
-            <h2 className="text-xl font-bold text-sky-900 font-display">Tương Tác</h2>
+            <Users className="w-6 h-6 text-neutral-600" />
+            <h2 className="text-xl font-bold text-neutral-900 font-display">Tương Tác</h2>
           </div>
           <button 
             onClick={onClose}
-            className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-sky-100 transition-colors shadow-sm"
+            className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors shadow-sm"
           >
             <X className="w-5 h-5" />
           </button>
@@ -615,7 +606,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 <div className="border-b border-neutral-100 p-4 flex items-center gap-3 bg-white shrink-0 sticky top-0 z-10 shadow-sm">
                   <button 
                     onClick={() => { setSelectedFriend(null); setSelectedGroupChat(null); }}
-                    className="px-3 py-1.5 bg-neutral-100 text-neutral-600 text-sm font-bold rounded-lg hover:bg-neutral-200 transition-colors"
+                    className="px-3 py-1.5 bg-neutral-100 text-neutral-600 text-sm font-bold rounded-3xl hover:bg-neutral-200 transition-colors"
                   >
                     Trở lại
                   </button>
@@ -624,33 +615,26 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       <AIAvatar uid={selectedFriend.friendId} name={selectedFriend.displayName} photoURL={selectedFriend.photoURL || friendStatuses[selectedFriend.friendId]?.photoURL} className="w-8 h-8 rounded-full border border-neutral-100 ml-2 object-cover bg-neutral-200" />
                       <div className="flex-1">
                         <h3 className="font-bold text-neutral-800 text-sm leading-none">{selectedFriend.displayName || 'Bạn bè'}</h3>
-                        <span className="text-[10px] text-green-500 font-semibold">{friendStatuses[selectedFriend.friendId] === 'online' ? 'Đang hoạt động' : 'Offline'}</span>
+                        <span className={`text-[10px] font-semibold ${friendStatuses[selectedFriend.friendId] === 'online' ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                          {friendStatuses[selectedFriend.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                        </span>
                       </div>
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
                             if (onStartCall) onStartCall(selectedFriend.friendId, false);
                           }}
-                          className="p-2 bg-sky-50 text-sky-600 font-bold rounded-lg hover:bg-sky-100 transition-colors flex items-center justify-center shrink-0"
+                          className="p-2 bg-neutral-50 text-neutral-600 font-bold rounded-3xl hover:bg-neutral-100 transition-colors flex items-center justify-center shrink-0"
                           title="Gọi Thoại"
                         >
                           <PhoneCall className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (onStartCall) onStartCall(selectedFriend.friendId, true);
-                          }}
-                          className="p-2 bg-sky-50 text-sky-600 font-bold rounded-lg hover:bg-sky-100 transition-colors flex items-center justify-center shrink-0"
-                          title="Gọi Video"
-                        >
-                          <VideoIcon className="w-5 h-5" />
                         </button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center ml-2 border border-indigo-200">
-                        <Users className="w-4 h-4 text-indigo-500" />
+                      <div className="w-8 h-8 rounded-full bg-neutral-100 bg-neutral-100 flex items-center justify-center ml-2 border border-neutral-200">
+                        <Users className="w-4 h-4 text-neutral-500" />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-bold text-neutral-800 text-sm leading-none">{selectedGroupChat?.name || 'Nhóm'}</h3>
@@ -665,11 +649,11 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50 pb-2">
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center px-6">
-                      <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
-                        <MessageCircle className="w-8 h-8 text-sky-200" />
+                      <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                        <MessageCircle className="w-8 h-8 text-neutral-200" />
                       </div>
-                      <p className="font-bold text-sky-900 mb-1">Gửi lời nhắn đầu tiên</p>
-                      <p className="text-sm text-sky-600/70">Chia sẻ niềm vui, hỏi thăm hoặc bàn bạc về tài chính cùng nhau nào. 💬</p>
+                      <p className="font-bold text-neutral-900 mb-1">Gửi lời nhắn đầu tiên</p>
+                      <p className="text-sm text-neutral-600/70">Chia sẻ niềm vui, hỏi thăm hoặc bàn bạc về tài chính cùng nhau nào. 💬</p>
                     </div>
                   ) : (
                     <div className="space-y-1 flex flex-col justify-end min-h-full">
@@ -706,25 +690,27 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                                 )}
                                 <div className={`group relative py-2.5 px-4 text-[15px] shadow-sm leading-relaxed ${
                                     isMe 
-                                      ? 'bg-sky-500 text-white rounded-[20px] rounded-br-sm' 
-                                      : 'bg-white text-neutral-800 border border-neutral-100 rounded-[20px] rounded-bl-sm'
+                                      ? 'bg-neutral-500 text-white rounded-3xl rounded-3xl' 
+                                      : 'bg-white text-neutral-800 border border-neutral-100 rounded-3xl rounded-3xl'
                                   }`}
                                 >
                                   <p className="break-words whitespace-pre-wrap text-[14px] sm:text-[15px]">{msg.text}</p>
                                 
                                 {msg.fileUrl && (
-                                  <div className="mt-2 text-center rounded-lg overflow-hidden relative">
-                                    {msg.fileType === 'video' ? (
-                                      <video src={msg.fileUrl} controls className="max-w-full max-h-[300px] rounded-lg bg-black/10" />
-                                    ) : msg.fileType === 'audio' ? (
-                                      <audio src={msg.fileUrl} controls className="max-w-[200px] sm:max-w-[250px] outline-none" />
-                                    ) : (
-                                      <img src={msg.fileUrl} alt="attachment" className="max-w-[200px] sm:max-w-[250px] max-h-[300px] rounded-lg object-cover border border-black/5 bg-white/20" />
+                                  <div className="mt-2 text-center rounded-3xl overflow-hidden relative">
+                                    {msg.isUploading && (
+                                       <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center rounded-3xl z-10 text-white backdrop-blur-[2px]">
+                                         <Loader2 className="w-8 h-8 animate-spin mb-2 drop-shadow-md text-white/90" />
+                                         <span className="text-xs font-medium drop-shadow-md">Đang xử lý...</span>
+                                       </div>
+                                    )}
+                                    {msg.fileType === 'audio' && (
+                                      <audio src={msg.fileUrl} controls={!msg.isUploading} className="max-w-[200px] sm:max-w-[250px] outline-none" />
                                     )}
                                   </div>
                                 )}
                                 </div>
-                                <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-sky-100' : 'text-neutral-400'}`}>
+                                <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-neutral-100' : 'text-neutral-400'}`}>
                                   <span>{timeStr}</span>
                                   {isMe && (
                                     <Check className="w-3 h-3" />
@@ -737,6 +723,28 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       })}
                     </div>
                   )}
+
+                  {Object.entries(typingStatus || {}).filter(([uid, isTyping]) => isTyping && uid !== user?.uid).length > 0 && (
+                     <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="flex items-end gap-2 max-w-[85%] mt-4"
+                      >
+                        <div className="w-8 h-8 rounded-full flex-shrink-0 shadow-sm relative overflow-hidden bg-neutral-200">
+                          <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                             <MessageCircle className="w-4 h-4" />
+                          </div>
+                        </div>
+                        <div className="flex flex-col">
+                           <div className="bg-white border border-neutral-100 rounded-3xl rounded-3xl py-3 px-4 shadow-sm flex gap-1.5 items-center h-[38px]">
+                             <span className="w-1.5 h-1.5 bg-neutral-400 rounded-3xl animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
+                             <span className="w-1.5 h-1.5 bg-neutral-400 rounded-3xl animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
+                             <span className="w-1.5 h-1.5 bg-neutral-400 rounded-3xl animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
+                           </div>
+                        </div>
+                     </motion.div>
+                  )}
                   <div ref={chatEndRef} className="h-4" />
                 </div>
                 
@@ -748,7 +756,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                         initial={{ opacity: 0, scale: 0.95, y: 10, transformOrigin: 'bottom left' }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                        className="absolute bottom-full mb-2 left-4 z-50 shadow-2xl rounded-2xl overflow-hidden"
+                        className="absolute bottom-full mb-2 left-4 z-50 shadow-2xl rounded-3xl overflow-hidden"
                       >
                         <EmojiPicker 
                           onEmojiClick={(emojiData) => {
@@ -760,42 +768,33 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                   </AnimatePresence>
                   
                   {isUploading && (
-                     <div className="absolute bottom-full mb-2 right-4 bg-white px-4 py-2 rounded-xl shadow-md border border-neutral-100 flex items-center gap-2 text-sm text-sky-600 font-medium">
+                     <div className="absolute bottom-full mb-2 right-4 bg-white px-4 py-2 rounded-3xl shadow-md border border-neutral-100 flex items-center gap-2 text-sm text-neutral-600 font-medium">
                        <Loader2 className="w-4 h-4 animate-spin" /> Đang gửi...
                      </div>
                   )}
                   
-                  <input type="file" accept="image/*,video/*" hidden ref={fileInputRef} onChange={handleFileUpload} />
-                  
                   <div className="flex gap-2 items-end">
-                    <div className="flex gap-1 bg-neutral-100 rounded-xl p-1 mb-1">
+                    <div className="flex gap-1 bg-neutral-100 rounded-3xl p-1 mb-1">
                       <button 
                         type="button" 
                         onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
-                        className={`p-2 rounded-lg transition-colors shrink-0 ${showEmojiPicker ? 'bg-white text-sky-600 shadow-sm' : 'text-neutral-500 hover:text-sky-600'}`}
+                        className={`p-2 rounded-3xl transition-colors shrink-0 ${showEmojiPicker ? 'bg-white text-neutral-600 shadow-sm' : 'text-neutral-500 hover:text-neutral-600'}`}
                       >
                         <Smile className="w-5 h-5" />
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => fileInputRef.current?.click()} 
-                        className="p-2 text-neutral-500 hover:text-sky-600 hover:bg-white rounded-lg transition-colors shrink-0"
-                      >
-                        <ImageIcon className="w-5 h-5" />
                       </button>
                     </div>
 
                     {isRecording ? (
-                      <div className="flex-1 bg-rose-50/50 rounded-xl px-4 py-1 flex items-center justify-between border border-rose-100 mb-1">
-                        <div className="flex items-center gap-3 text-rose-600">
-                           <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                      <div className="flex-1 bg-orange-50/50 rounded-3xl px-4 py-1 flex items-center justify-between border border-orange-100 mb-1">
+                        <div className="flex items-center gap-3 text-orange-600">
+                           <div className="w-2.5 h-2.5 rounded-3xl bg-orange-500 animate-pulse" />
                            <span className="text-sm font-medium font-mono">{Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                           <button type="button" onClick={cancelRecording} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors" title="Huỷ">
+                           <button type="button" onClick={cancelRecording} className="p-2 text-orange-500 hover:bg-orange-100 rounded-3xl transition-colors" title="Huỷ">
                               <Trash2 className="w-4 h-4" />
                            </button>
-                           <button type="button" onClick={stopRecording} className="p-2 text-sky-600 bg-sky-100/50 hover:bg-sky-100 rounded-lg transition-colors ml-1 font-bold flex items-center gap-1 text-sm">
+                           <button type="button" onClick={stopRecording} className="p-2 text-neutral-600 bg-neutral-100/50 hover:bg-neutral-100 rounded-3xl transition-colors ml-1 font-bold flex items-center gap-1 text-sm">
                               Gửi
                            </button>
                         </div>
@@ -804,9 +803,9 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       <input
                         type="text"
                         value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
+                        onChange={handleTyping}
                         placeholder="Nhập tin nhắn..."
-                        className="flex-1 bg-neutral-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all border-none mb-1 min-w-[100px]"
+                        className="flex-1 bg-neutral-100 rounded-3xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500 transition-all border-none mb-1 min-w-[100px]"
                       />
                     )}
                     
@@ -814,7 +813,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       newMessage.trim() ? (
                         <button 
                           type="submit"
-                          className="w-12 h-12 mb-1 bg-sky-500 text-white rounded-xl flex items-center justify-center hover:bg-sky-600 transition-all shadow-md shadow-sky-500/20 shrink-0 transform active:scale-95"
+                          className="w-12 h-12 bg-neutral-500 text-white rounded-full flex items-center justify-center hover:bg-neutral-600 transition-all shadow-md shadow-neutral-500/20 shrink-0 transform active:scale-95"
                         >
                           <Send className="w-5 h-5 ml-1" />
                         </button>
@@ -822,7 +821,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                         <button 
                           type="button"
                           onClick={startRecording}
-                          className="w-12 h-12 mb-1 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center hover:bg-sky-200 hover:text-sky-700 transition-all shadow-sm shrink-0 transform active:scale-95"
+                          className="w-12 h-12 bg-neutral-100 text-neutral-600 rounded-full flex items-center justify-center hover:bg-neutral-200 hover:text-neutral-700 transition-all shadow-sm shrink-0 transform active:scale-95"
                           title="Ghi âm"
                         >
                           <Mic className="w-5 h-5" />
@@ -839,27 +838,49 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
-                className="p-4 sm:p-6 space-y-8 pb-10 absolute inset-0 overflow-y-auto bg-white"
+                className="p-4 sm:p-6 space-y-6 pb-10 absolute inset-0 overflow-y-auto bg-white"
               >
+                <div className="flex bg-neutral-100 p-1 rounded-3xl mb-4 shrink-0 shadow-sm border border-neutral-200 sticky top-0 z-10 backdrop-blur-md bg-white/80">
+                  <button 
+                    onClick={() => setActiveTab('friends')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'friends' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    Bạn bè
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('groups')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'groups' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    Nhóm
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('requests')}
+                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'requests' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    Kết bạn {friendRequests.length > 0 && <span className="bg-orange-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-mono">{friendRequests.length}</span>}
+                  </button>
+                </div>
+
+                {activeTab === 'friends' && (
                 <div className="space-y-4">
                   {/* Bubble Notes / Friends Stories Row */}
                   <div className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6 hide-scrollbar">
                     {/* My Bubble Note */}
                     <div className="flex flex-col items-center gap-1 cursor-pointer shrink-0" onClick={() => { setBubbleNoteDraft(myBubbleNote); setBubbleVisibleToDraft(myBubbleVisibleTo); setShowBubbleNoteModal(true); }}>
                       <div className="relative pt-3 pr-3">
-                        <div className="w-16 h-16 rounded-full border-2 border-dashed border-sky-300 flex items-center justify-center bg-sky-50 overflow-hidden relative group">
+                        <div className="w-16 h-16 rounded-full border-2 border-dashed border-neutral-300 flex items-center justify-center bg-neutral-50 overflow-hidden relative group">
                           {user?.photoURL ? (
                             <AIAvatar uid={user.uid} name={user.displayName} photoURL={user.photoURL} className="w-full h-full object-cover" />
                           ) : (
-                            <Heart className="w-6 h-6 text-sky-300 group-hover:scale-110 transition-transform" />
+                            <Heart className="w-6 h-6 text-neutral-300 group-hover:scale-110 transition-transform" />
                           )}
                           <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <span className="text-white text-2xl font-bold">+</span>
                           </div>
                         </div>
                         {myBubbleNote && (
-                          <div className="absolute top-0 right-0 bg-white p-1 rounded-2xl shadow-sm border border-neutral-100 z-10">
-                            <div className="bg-sky-100 text-sky-800 text-[10px] px-2 py-1 rounded-xl max-w-[80px] truncate" title={myBubbleNote}>
+                          <div className="absolute top-0 right-0 bg-white p-1 rounded-3xl shadow-sm border border-neutral-100 z-10">
+                            <div className="bg-neutral-100 text-neutral-800 text-[10px] px-2 py-1 rounded-3xl max-w-[80px] truncate" title={myBubbleNote}>
                               {myBubbleNote}
                             </div>
                           </div>
@@ -872,11 +893,11 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     {friendsList.filter(f => f.bubbleNote && (f.bubbleVisibleTo?.includes('all') || f.bubbleVisibleTo?.includes(user?.uid))).map(f => (
                       <div key={f.id} className="flex flex-col items-center gap-1 shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setSelectedFriend(f)}>
                         <div className="relative pt-3 pr-3">
-                          <div className="w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-sky-400 to-pink-400">
-                            <AIAvatar uid={f.friendId} name={f.displayName} photoURL={f.photoURL} className="w-full h-full rounded-full border-2 border-white object-cover" />
+                          <div className="w-4 h-4 rounded-full p-0.5 bg-neo-bg p-0.5 bg-neo-bg">
+                            <AIAvatar uid={f.friendId} name={f.displayName} photoURL={f.photoURL} className="w-full h-full rounded-3xl border-2 border-white object-cover" />
                           </div>
-                          <div className="absolute top-0 right-0 bg-white p-1 rounded-2xl shadow-sm border border-neutral-100 z-10">
-                            <div className="bg-neutral-100 text-neutral-800 text-[10px] px-2 py-1 rounded-xl max-w-[80px] line-clamp-2 leading-tight" title={f.bubbleNote}>
+                          <div className="absolute top-0 right-0 bg-white p-1 rounded-3xl shadow-sm border border-neutral-100 z-10">
+                            <div className="bg-neutral-100 text-neutral-800 text-[10px] px-2 py-1 rounded-3xl max-w-[80px] line-clamp-2 leading-tight" title={f.bubbleNote}>
                               {f.bubbleNote}
                             </div>
                           </div>
@@ -885,16 +906,19 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       </div>
                     ))}
                   </div>
+                </div>
+                )}
 
-                  {/* ID section all in one line! */}
-                  <div className="flex flex-col sm:flex-row gap-4 pb-4 border-b border-neutral-100">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-xs font-bold text-sky-700 uppercase tracking-widest pl-1">ID Của Tôi</p>
-                      <div className="flex items-center gap-2 bg-neutral-50 rounded-xl p-3 border border-neutral-200 shadow-sm h-[52px]">
+                {activeTab === 'requests' && (
+                  <div>
+                    <div className="flex flex-col sm:flex-row gap-4 pb-4 border-b border-neutral-100">
+                      <div className="flex-1 space-y-2">
+                      <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1">ID Của Tôi</p>
+                      <div className="flex items-center gap-2 bg-neutral-50 rounded-3xl p-3 border border-neutral-200 shadow-sm h-[52px]">
                         <span className="flex-1 font-mono text-neutral-800 text-sm truncate select-all">{myFriendCode || 'Đang tải...'}</span>
                         <button 
                           onClick={handleCopyId}
-                          className="p-2 text-sky-600 hover:bg-sky-100 rounded-lg transition-colors shrink-0 bg-white shadow-sm h-full flex items-center justify-center w-[36px]"
+                          className="p-2 text-neutral-600 hover:bg-neutral-100 rounded-3xl transition-colors shrink-0 bg-white shadow-sm h-full flex items-center justify-center w-[36px]"
                           title="Sao chép ID"
                         >
                           {isCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -903,7 +927,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     </div>
 
                     <div className="flex-1 space-y-2">
-                      <p className="text-xs font-bold text-sky-700 uppercase tracking-widest pl-1">Kết Nối ID Mới</p>
+                      <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1">Kết Nối ID Mới</p>
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2 h-[52px]">
                           <input 
@@ -916,7 +940,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                           <button 
                             onClick={handleSendFriendRequest}
                             disabled={!friendCode.trim()}
-                            className="px-5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl transition-all shadow-md shadow-sky-600/20 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95 h-full"
+                            className="px-5 bg-neutral-600 hover:bg-neutral-700 text-white font-bold rounded-3xl transition-all shadow-md shadow-neutral-600/20 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap active:scale-95 h-full"
                           >
                             Gửi
                           </button>
@@ -927,7 +951,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
-                              className="text-sm font-medium text-sky-600 pl-1"
+                              className="text-sm font-medium text-neutral-600 pl-1"
                             >
                               {friendReqStatus}
                             </motion.span>
@@ -939,10 +963,10 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                   
                   {friendRequests.length > 0 && (
                     <div className="space-y-4">
-                      <p className="text-xs font-bold text-sky-700 uppercase tracking-widest pl-1">Lời Mời Kết Bạn</p>
+                      <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1">Lời Mời Kết Bạn</p>
                       <div className="space-y-2">
                         {friendRequests.map((req) => (
-                           <div key={req.id} className="flex items-center justify-between bg-white border border-neutral-200 rounded-2xl p-3 shadow-sm">
+                           <div key={req.id} className="flex items-center justify-between bg-white border border-neutral-200 rounded-3xl p-3 shadow-sm">
                              <div className="flex flex-col gap-0.5">
                                <p className="text-sm font-bold text-neutral-800">
                                  {req.type === 'couple' ? `Lời mời cặp đôi: ${req.relationshipType}` : 'Lời mời kết bạn'}
@@ -950,10 +974,10 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                                <p className="text-xs text-neutral-500">Từ: {req.senderId.slice(0, 8)}...</p>
                              </div>
                              <div className="flex gap-2">
-                               <button onClick={() => handleAcceptFriendRequest(req)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                               <button onClick={() => handleAcceptFriendRequest(req)} className="p-2 text-neutral-600 hover:bg-neutral-50 rounded-3xl">
                                  <Check className="w-5 h-5"/>
                                </button>
-                               <button onClick={() => handleRejectFriendRequest(req)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg">
+                               <button onClick={() => handleRejectFriendRequest(req)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-3xl">
                                  <X className="w-5 h-5"/>
                                </button>
                              </div>
@@ -963,16 +987,18 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     </div>
                   )}
                 </div>
+                )}
 
-                <div>
-                  <p className="text-xs font-bold text-sky-700 uppercase tracking-widest pl-1 mb-3 border-t pt-6 border-neutral-100">Những Người Đã Kết Nối</p>
+                {activeTab === 'friends' && (
+                  <div>
+                    <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1 mb-3 pt-2">Những Người Đã Kết Nối</p>
                   {friendsList.length === 0 ? (
-                    <div className="bg-sky-50/50 rounded-2xl p-6 text-center border border-sky-100/50">
-                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
-                        <Users className="w-5 h-5 text-sky-300" />
+                    <div className="bg-neutral-50/50 rounded-3xl p-6 text-center border border-neutral-100/50">
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                        <Users className="w-5 h-5 text-neutral-300" />
                       </div>
-                      <p className="text-sm text-sky-800 font-medium">Bạn chưa kết nối với ai.</p>
-                      <p className="text-xs text-sky-600/70 mt-1 mt-1">Gửi ID của mình cho người ấy để bắt đầu nhé!</p>
+                      <p className="text-sm text-neutral-800 font-medium">Bạn chưa kết nối với ai.</p>
+                      <p className="text-xs text-neutral-600/70 mt-1 mt-1">Gửi ID của mình cho người ấy để bắt đầu nhé!</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -985,22 +1011,22 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                             exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                             transition={{ delay: i * 0.05, layout: { type: 'spring', bounce: 0.2 } }}
                             key={f.id} 
-                            className="flex items-center justify-between bg-white border border-neutral-200 rounded-2xl p-3 shadow-sm hover:border-sky-300 transition-colors group cursor-pointer active:scale-[0.98] touch-manipulation"
+                            className="flex items-center justify-between bg-white border border-neutral-200 rounded-3xl p-3 shadow-sm hover:border-neutral-300 transition-colors group cursor-pointer active:scale-[0.98] touch-manipulation"
                             onClick={() => setSelectedFriend(f)}
                           >
                             <div className="flex items-center gap-3">
-                              <AIAvatar uid={f.friendId} name={f.displayName} photoURL={f.photoURL} className="w-10 h-10 rounded-full shadow-inner object-cover bg-neutral-200" />
+                              <AIAvatar uid={f.friendId} name={f.displayName} photoURL={f.photoURL} className="w-8 h-8 rounded-full shadow-inner object-cover bg-neutral-200" />
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <p className="text-sm font-bold text-neutral-800 group-hover:text-sky-700 transition-colors">{f.displayName || 'Bạn bè'}</p>
+                                  <p className="text-sm font-bold text-neutral-800 group-hover:text-neutral-700 transition-colors">{f.displayName || 'Bạn bè'}</p>
                                   {f.relationshipType && (
-                                    <span className="text-[10px] font-bold text-pink-500 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">
+                                    <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-3xl border border-orange-100">
                                       {f.relationshipType}
                                     </span>
                                   )}
                                 </div>
-                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${friendStatuses[f.friendId] === 'online' ? 'text-emerald-500 bg-emerald-50' : 'text-neutral-500 bg-neutral-100'}`}>
-                                    {friendStatuses[f.friendId] === 'online' ? 'Đang hoạt động' : 'Offline'}
+                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-3xl ${friendStatuses[f.friendId] === 'online' ? 'text-neutral-500 bg-neutral-50' : 'text-neutral-500 bg-neutral-100'}`}>
+                                    {friendStatuses[f.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
                                   </span>
                               </div>
                             </div>
@@ -1010,38 +1036,28 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                                   e.stopPropagation(); 
                                   if (onStartCall) onStartCall(f.friendId, false); 
                                 }}
-                                className="p-2.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700 rounded-xl transition-all"
+                                className="p-2.5 text-neutral-600 bg-neutral-50 hover:bg-neutral-100 hover:text-neutral-700 rounded-3xl transition-all"
                                 title="Gọi thoại"
                               >
                                 <PhoneCall className="w-4 h-4" />
                               </button>
                               <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  if (onStartCall) onStartCall(f.friendId, true); 
-                                }}
-                                className="p-2.5 text-sky-600 bg-sky-50 hover:bg-sky-100 hover:text-sky-700 rounded-xl transition-all"
-                                title="Gọi Video"
-                              >
-                                <VideoIcon className="w-4 h-4" />
-                              </button>
-                              <button 
                                 onClick={(e) => { e.stopPropagation(); setSelectedFriend(f); }}
-                                className="p-2.5 text-sky-600 bg-sky-50 hover:bg-sky-100 hover:text-sky-700 rounded-xl transition-all ml-1"
+                                className="p-2.5 text-neutral-600 bg-neutral-50 hover:bg-neutral-100 hover:text-neutral-700 rounded-3xl transition-all ml-1"
                                 title="Nhắn tin"
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setShowCoupleModal(f.friendId); }}
-                                className="p-2.5 text-pink-500 bg-pink-50 hover:bg-pink-100 hover:text-pink-600 rounded-xl transition-all ml-1 opacity-50 group-hover:opacity-100"
+                                className="p-2.5 text-orange-500 bg-orange-50 hover:bg-orange-100 hover:text-orange-600 rounded-3xl transition-all ml-1 opacity-50 group-hover:opacity-100"
                                 title="Thiết lập quan hệ"
                               >
                                 <Heart className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleRemoveFriend(f.id); }}
-                                className="p-2.5 text-rose-500 bg-rose-50 hover:bg-rose-100 hover:text-rose-600 rounded-xl transition-all ml-1 opacity-50 group-hover:opacity-100"
+                                className="p-2.5 text-orange-500 bg-orange-50 hover:bg-orange-100 hover:text-orange-600 rounded-3xl transition-all ml-1 opacity-50 group-hover:opacity-100"
                                 title="Xóa liên kết"
                               >
                                 <UserMinus className="w-4 h-4" />
@@ -1053,18 +1069,20 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     </div>
                   )}
                 </div>
+                )}
 
+                {activeTab === 'groups' && (
                 <div>
                   <div className="flex items-center justify-between mt-6 pt-6 border-t border-neutral-100 mb-3">
-                    <p className="text-xs font-bold text-sky-700 uppercase tracking-widest pl-1">Nhóm Chat</p>
-                    <button onClick={() => setShowCreateGroup(true)} className="text-xs bg-sky-100 hover:bg-sky-200 text-sky-700 px-3 py-1.5 rounded-lg font-bold transition-all">
+                    <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1">Nhóm Chat</p>
+                    <button onClick={() => setShowCreateGroup(true)} className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-3 py-1.5 rounded-3xl font-bold transition-all">
                       + Tạo Nhóm
                     </button>
                   </div>
                   {chatGroups.length === 0 ? (
-                    <div className="bg-sky-50/50 rounded-2xl p-6 text-center border border-sky-100/50">
-                      <p className="text-sm text-sky-800 font-medium">Bạn chưa tham gia nhóm nào.</p>
-                      <p className="text-xs text-sky-600/70 mt-1">Tạo nhóm để trò chuyện cùng nhiều bạn bè!</p>
+                    <div className="bg-neutral-50/50 rounded-3xl p-6 text-center border border-neutral-100/50">
+                      <p className="text-sm text-neutral-800 font-medium">Bạn chưa tham gia nhóm nào.</p>
+                      <p className="text-xs text-neutral-600/70 mt-1">Tạo nhóm để trò chuyện cùng nhiều bạn bè!</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1077,22 +1095,22 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                             exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
                             transition={{ delay: i * 0.05, layout: { type: 'spring', bounce: 0.2 } }}
                             key={g.id} 
-                            className="flex items-center justify-between bg-white border border-neutral-200 rounded-2xl p-3 shadow-sm hover:border-indigo-300 transition-colors group cursor-pointer active:scale-[0.98] touch-manipulation"
+                            className="flex items-center justify-between bg-white border border-neutral-200 rounded-3xl p-3 shadow-sm hover:border-neutral-300 transition-colors group cursor-pointer active:scale-[0.98] touch-manipulation"
                             onClick={() => setSelectedGroupChat(g)}
                           >
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center border border-indigo-200">
-                                <Users className="w-5 h-5 text-indigo-500" />
+                              <div className="w-10 h-10 bg-neutral-100 rounded-full bg-neutral-100 flex items-center justify-center border border-neutral-200">
+                                <Users className="w-5 h-5 text-neutral-500" />
                               </div>
                               <div>
-                                <p className="text-sm font-bold text-neutral-800 group-hover:text-indigo-700 transition-colors">{g.name || 'Nhóm Chat'}</p>
+                                <p className="text-sm font-bold text-neutral-800 group-hover:text-neutral-700 transition-colors">{g.name || 'Nhóm Chat'}</p>
                                 <span className="text-[10px] text-neutral-500 font-semibold">{g.participants?.length || 0} thành viên</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setSelectedGroupChat(g); }}
-                                className="p-2.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 rounded-xl transition-all ml-1"
+                                className="p-2.5 text-neutral-600 bg-neutral-50 hover:bg-neutral-100 hover:text-neutral-700 rounded-3xl transition-all ml-1"
                                 title="Nhắn tin nhóm"
                               >
                                 <MessageCircle className="w-4 h-4" />
@@ -1104,6 +1122,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     </div>
                   )}
                 </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1118,10 +1137,10 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-white z-50 flex flex-col pt-16 px-6 pb-6 overflow-y-auto"
             >
-               <button onClick={() => setShowCreateGroup(false)} className="absolute top-4 right-4 p-2 text-neutral-500 hover:text-neutral-900 bg-neutral-100 rounded-full">
+               <button onClick={() => setShowCreateGroup(false)} className="absolute top-4 right-4 p-2 text-neutral-500 hover:text-neutral-900 bg-neutral-100 rounded-3xl">
                  <X className="w-5 h-5" />
                </button>
-               <h3 className="text-xl font-bold font-display text-sky-900 mb-6 flex items-center gap-2"><Users className="w-6 h-6 text-sky-600"/> Tạo Nhóm Chat</h3>
+               <h3 className="text-xl font-bold font-display text-neutral-900 mb-6 flex items-center gap-2"><Users className="w-6 h-6 text-neutral-600"/> Tạo Nhóm Chat</h3>
                
                <div className="space-y-6">
                  <div>
@@ -1130,7 +1149,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                      type="text" 
                      value={groupName} 
                      onChange={e => setGroupName(e.target.value)} 
-                     className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none transition-all"
+                     className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-3 text-sm focus:ring-2 focus:ring-neutral-500 focus:outline-none transition-all"
                      placeholder="Ví dụ: Nhóm Đầu Tư, Gia đình..."
                    />
                  </div>
@@ -1138,14 +1157,14 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                  <div>
                    <label className="block text-sm font-bold text-neutral-700 mb-2">Chọn thành viên</label>
                    {friendsList.length === 0 ? (
-                     <p className="text-sm text-neutral-500 bg-neutral-50 p-4 rounded-xl text-center border border-neutral-100">Bạn cần có bạn bè để thêm vào nhóm.</p>
+                     <p className="text-sm text-neutral-500 bg-neutral-50 p-4 rounded-3xl text-center border border-neutral-100">Bạn cần có bạn bè để thêm vào nhóm.</p>
                    ) : (
-                     <div className="space-y-2 max-h-60 overflow-y-auto border border-neutral-100 rounded-xl p-2 bg-neutral-50">
+                     <div className="space-y-2 max-h-60 overflow-y-auto border border-neutral-100 rounded-3xl p-2 bg-neutral-50">
                        {friendsList.map(f => (
-                         <label key={f.friendId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer transition-colors border border-transparent hover:border-neutral-200">
+                         <label key={f.friendId} className="flex items-center gap-3 p-2 rounded-3xl hover:bg-white cursor-pointer transition-colors border border-transparent hover:border-neutral-200">
                            <input 
                              type="checkbox" 
-                             className="w-5 h-5 rounded border border-neutral-300 text-sky-600 focus:ring-sky-500"
+                             className="w-5 h-5 rounded border border-neutral-300 text-neutral-600 focus:ring-neutral-500"
                              checked={selectedGroupMembers.includes(f.friendId)}
                              onChange={(e) => {
                                if (e.target.checked) setSelectedGroupMembers(prev => [...prev, f.friendId]);
@@ -1163,7 +1182,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                  <button 
                    onClick={handleCreateGroup}
                    disabled={!groupName.trim() || selectedGroupMembers.length === 0}
-                   className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 text-sm"
+                   className="w-full bg-neutral-600 hover:bg-neutral-700 text-white font-bold py-3.5 rounded-3xl shadow-lg shadow-neutral-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 text-sm"
                  >
                    Tạo Nhóm
                  </button>
@@ -1182,14 +1201,14 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
             >
               <button 
                 onClick={() => setShowCoupleModal(null)}
-                className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-full transition-colors"
+                className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-3xl transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
               
               <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 bg-pink-50 rounded-full flex items-center justify-center mb-6">
-                  <Heart className="w-10 h-10 text-pink-500" />
+                <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mb-6">
+                  <Heart className="w-10 h-10 text-orange-500" />
                 </div>
                 <h3 className="text-2xl font-bold text-neutral-800 mb-2 font-display">Gắn Kết Yêu Thương</h3>
                 <p className="text-sm text-neutral-500 mb-8 max-w-[250px]">
@@ -1201,14 +1220,14 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     <button
                       key={type}
                       onClick={() => setCoupleType(type)}
-                      className={`w-full p-4 rounded-2xl border-2 text-left font-bold transition-all flex items-center justify-between ${
+                      className={`w-full p-4 rounded-3xl border-2 text-left font-bold transition-all flex items-center justify-between ${
                         coupleType === type 
-                          ? 'border-pink-500 bg-pink-50 text-pink-700' 
-                          : 'border-neutral-100 bg-neutral-50 text-neutral-600 hover:border-pink-200 hover:bg-white'
+                          ? 'border-orange-500 bg-orange-50 text-orange-700' 
+                          : 'border-neutral-100 bg-neutral-50 text-neutral-600 hover:border-orange-200 hover:bg-white'
                       }`}
                     >
                       {type}
-                      {coupleType === type && <Check className="w-5 h-5 text-pink-500" />}
+                      {coupleType === type && <Check className="w-5 h-5 text-orange-500" />}
                     </button>
                   ))}
                 </div>
@@ -1216,13 +1235,13 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 <div className="w-full mt-auto">
                   <button 
                     onClick={handleSendCoupleRequest}
-                    className="w-full py-4 bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-2xl shadow-lg shadow-pink-500/30 transition-all active:scale-[0.98]"
+                    className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-3xl shadow-lg shadow-orange-500/30 transition-all active:scale-[0.98]"
                   >
                     Gửi Lời Mời
                   </button>
                   <button 
                     onClick={() => setShowCoupleModal(null)}
-                    className="w-full py-4 text-neutral-500 hover:text-neutral-700 font-bold rounded-2xl mt-2 transition-colors"
+                    className="w-full py-4 text-neutral-500 hover:text-neutral-700 font-bold rounded-3xl mt-2 transition-colors"
                   >
                     Hủy
                   </button>
@@ -1247,11 +1266,11 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
               >
                 <div className="w-20 h-20 rounded-full border-4 border-white shadow-md relative mb-4">
                    {user?.photoURL ? (
-                      <AIAvatar uid={user.uid} name={user.displayName} photoURL={user.photoURL} className="w-full h-full object-cover rounded-full bg-neutral-200" />
+                      <AIAvatar uid={user.uid} name={user.displayName} photoURL={user.photoURL} className="w-full h-full object-cover rounded-3xl bg-neutral-200" />
                    ) : (
-                      <div className="w-full h-full bg-sky-100 flex items-center justify-center rounded-full"><Users className="w-8 h-8 text-sky-500" /></div>
+                      <div className="w-full h-full bg-neutral-100 flex items-center justify-center rounded-3xl"><Users className="w-8 h-8 text-neutral-500" /></div>
                    )}
-                   <div className="absolute -bottom-2 right-0 bg-sky-500 text-white rounded-full p-1 border-2 border-white"><Smile className="w-4 h-4"/></div>
+                   <div className="absolute -bottom-2 right-0 bg-neutral-500 text-white rounded-3xl p-1 border-2 border-white"><Smile className="w-4 h-4"/></div>
                 </div>
 
                 <h3 className="text-xl font-bold text-neutral-800 mb-1">Ghi chú của tôi</h3>
@@ -1262,7 +1281,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     <label className="text-sm font-bold text-neutral-700 block mb-2">Trạng thái / Ghi chú</label>
                     <input 
                       type="text"
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500 transition-all font-medium"
                       placeholder="Đang làm gì thế? (tối đa 60 ký tự)"
                       maxLength={60}
                       value={bubbleNoteDraft}
@@ -1272,7 +1291,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                   <div>
                     <label className="text-sm font-bold text-neutral-700 block mb-2">Cho phép ai xem?</label>
                     <select 
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium appearance-none"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-500 transition-all font-medium appearance-none"
                       value={bubbleVisibleToDraft.includes('all') ? 'all' : (bubbleVisibleToDraft.length > 0 ? bubbleVisibleToDraft[0] : 'all')}
                       onChange={e => {
                         const val = e.target.value;
@@ -1300,13 +1319,13 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                          setShowBubbleNoteModal(false);
                        } catch(e) {}
                     }}
-                    className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 font-bold rounded-xl transition-all"
+                    className="flex-1 py-3.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 font-bold rounded-3xl transition-all"
                   >
                     Xóa
                   </button>
                   <button 
                     onClick={handleSaveBubbleNote}
-                    className="flex-[2] py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-lg shadow-sky-600/30 transition-all"
+                    className="flex-[2] py-3.5 bg-neutral-600 hover:bg-neutral-700 text-white font-bold rounded-3xl shadow-lg shadow-neutral-600/30 transition-all"
                   >
                     Lưu
                   </button>
@@ -1314,7 +1333,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
 
                 <button 
                   onClick={() => setShowBubbleNoteModal(false)}
-                  className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-full transition-colors"
+                  className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-3xl transition-colors"
                 >
                    <X className="w-5 h-5"/>
                 </button>

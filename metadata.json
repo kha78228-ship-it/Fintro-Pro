@@ -1,6 +1,9 @@
 {
   "name": "FinTrack Pro",
   "description": "A comprehensive financial management application with expense tracking, budgeting, and AI-powered insights, with couple and friends communication features.",
-  "requestFramePermissions": ["camera", "microphone"],
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
   "majorCapabilities": []
 }

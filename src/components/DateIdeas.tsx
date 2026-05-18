@@ -16,21 +16,21 @@ export default function DateIdeas() {
       desc: "Chuẩn bị thảm caro, vài miếng sandwich và chút hoa quả. Ngắm ánh chiều tà rơi trên mặt hồ.",
       type: "Lãng mạn & Thiên nhiên",
       icon: <Trees className="w-5 h-5" />,
-      color: "bg-emerald-50 text-emerald-600 border-emerald-200"
+      color: "bg-neutral-50 text-neutral-600 border-neutral-200"
     },
     {
       title: "Nghe nhạc Live Acoustic",
       desc: "Đưa nhau đi trốn ở một pub nhỏ, nhâm nhi cocktail và chill theo điệu nhạc.",
       type: "Thư giãn",
       icon: <Music className="w-5 h-5" />,
-      color: "bg-indigo-50 text-indigo-600 border-indigo-200"
+      color: "bg-neutral-50 text-neutral-600 border-neutral-200"
     },
     {
       title: "Nấu một món mới tinh",
       desc: "Cùng đi siêu thị mua nguyên liệu cồng kềnh về nấu một món chưa từng làm bao giờ.",
       type: "Vui vẻ",
       icon: <UtensilsCrossed className="w-5 h-5" />,
-      color: "bg-rose-50 text-rose-600 border-rose-200"
+      color: "bg-orange-50 text-orange-600 border-orange-200"
     }
   ];
 
@@ -53,7 +53,7 @@ export default function DateIdeas() {
             transition={{ delay: idx * 0.1 }}
             className="flex gap-4 p-6 bg-white rounded-3xl shadow-sm border border-neutral-100 hover:shadow-lg transition-all"
           >
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${idea.color}`}>
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 border ${idea.color}`}>
               {idea.icon}
             </div>
             <div>
@@ -66,7 +66,7 @@ export default function DateIdeas() {
       </div>
       
       <div className="mt-8 text-center">
-        <button className="bg-orange-100 text-orange-700 font-bold px-8 py-4 rounded-xl hover:bg-orange-200 transition-colors">
+        <button className="bg-orange-100 text-orange-700 font-bold px-8 py-4 rounded-3xl hover:bg-orange-200 transition-colors">
           Tạo random một ý tưởng ngay!
         </button>
       </div>

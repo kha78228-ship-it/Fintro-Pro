@@ -1,59 +1,129 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700&family=JetBrains+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&family=Lora:wght@400;500;600;700&family=Nunito:wght@300;400;600;700&family=Merriweather:wght@300;400;700&family=Quicksand:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--theme-font, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --color-neo-bg: #f4f4f5;
+  --color-neo-dark: #000000;
+  --color-neo-orange: #f97316;
+  --color-neo-light: #ffffff;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Playfair Display", serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Improved contrast for default neutral colors in Vintage */
+  --color-neutral-50: #ffffff;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #64748b; /* darkened from default */
+  --color-neutral-500: #475569; /* darkened from default */
+  --color-neutral-600: #334155;
+  --color-neutral-700: #1e293b;
+  --color-neutral-800: #0f172a;
+  --color-neutral-900: #020617;
+
+  /* Override border radius globally for sharp aesthetic */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+}
+
+@layer base {
+  [data-theme="vietnam"] {
+    /* Invert Light/Dark Scales for dark UI */
+    --color-white: #0a1128;
+    --color-black: #ffffff;
+    
+    --color-neo-bg: transparent;
+    --color-neo-dark: #ffffff;
+    --color-neo-light: #0a1128;
+    
+    /* Solid inverted grayscale for Vietnam theme */
+    --color-neutral-50: #0a1128;
+    --color-neutral-100: #121b36;
+    --color-neutral-200: #1e293b;
+    --color-neutral-300: #334155;
+    --color-neutral-400: #94a3b8; /* Shifted lighter for text contrast */
+    --color-neutral-500: #cbd5e1; /* Shifted lighter for text contrast */
+    --color-neutral-600: #e2e8f0; /* Shifted lighter for text contrast */
+    --color-neutral-700: #f1f5f9; /* Shifted lighter for text contrast */
+    --color-neutral-800: #f8fafc;
+    --color-neutral-900: #ffffff;
+    
+    /* Give orange specific deep neon hues */
+    --color-orange-50: #2d0b0b;
+    --color-orange-100: #4a1515;
+    --color-orange-200: #7a2222;
+    --color-orange-300: #a32e2e;
+    --color-orange-400: #de3535;
+    --color-orange-500: #ff3b3b;
+    --color-orange-600: #ff5c5c;
+    --color-orange-700: #ff8585;
+  }
 }
 
 @layer base {
   body {
-    @apply bg-[#f5f5f5] font-sans antialiased;
-    color: var(--theme-text-color, #1a1a1a);
+    background-color: var(--color-neo-bg);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+    background-attachment: fixed;
+    color: var(--color-neo-dark);
+    font-family: var(--font-sans);
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
   }
-  
-  h1, h2, h3, h4, h5, h6, .text-neutral-900 {
-    color: var(--theme-text-color, #171717) !important;
-  }
-  .text-neutral-800 {
-    color: var(--theme-text-color, #262626) !important;
-  }
-  
-  /* Buttons can keep their text logic, but if they have specific neutral-900 backgrounds, we might want to let them be */
-  .bg-neutral-900 {
-    background-color: var(--theme-text-color, #171717) !important;
-  }
-  .text-white {
-    color: #ffffff !important;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--color-neo-dark) !important;
+    font-family: var(--font-display);
   }
 }
 
 @layer components {
-  /* Clean utility cards */
+  /* Override basic classes with Neo style */
   .card {
-    @apply bg-white rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] border border-neutral-100;
-  }
-  
-  /* Form elements */
-  .input-field {
-    @apply w-full bg-[#f8f9fa] border border-neutral-200 rounded-2xl p-4 text-base focus:ring-2 focus:ring-neutral-900 outline-none transition-all;
-  }
-  
-  .btn-primary {
-    @apply bg-neutral-900 text-white rounded-2xl py-3 px-6 font-semibold shadow-sm hover:bg-neutral-800 transition-all active:scale-[0.98];
-  }
-  
-  .btn-secondary {
-    @apply bg-white text-neutral-900 rounded-2xl py-3 px-6 font-semibold border border-neutral-200 shadow-sm hover:bg-neutral-50 transition-all active:scale-[0.98];
+    @apply bg-neo-light shadow-none border border-neo-dark;
   }
 
-  /* Micro-labels */
-  .micro-label {
-    @apply text-[10px] font-bold text-neutral-400 uppercase tracking-widest;
+  .input-field {
+    @apply w-full bg-neo-light border border-neo-dark p-4 text-base focus:ring-0 focus:outline-none transition-all;
   }
+
+  .btn-primary {
+    @apply bg-neo-dark text-neo-light py-3 px-6 font-semibold border-none hover:bg-neo-orange transition-colors uppercase tracking-widest text-xs;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent text-neo-dark py-3 px-6 font-semibold border border-neo-dark hover:bg-neo-dark hover:text-neo-light transition-colors uppercase tracking-widest text-xs;
+  }
+
+  .micro-label {
+    @apply text-[10px] font-bold text-neo-dark uppercase tracking-widest;
+  }
+}
+
+/* Force override of rounded corners to match Neo aesthetic where classes might bypass theme */
+* {
+  border-radius: 0 !important;
+}
+
+/* Exception for full cirles like avatars */
+.rounded-full {
+  border-radius: 9999px !important;
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
 }
 
 .glow {
@@ -68,6 +138,35 @@
     padding-top: env(safe-area-inset-top);
   }
   .min-h-screen-safe {
-    min-height: calc(100vh - env(safe-area-inset-bottom) - env(safe-area-inset-top));
+    min-height: calc(
+      100vh - env(safe-area-inset-bottom) - env(safe-area-inset-top)
+    );
   }
+
+  /* Neo-brutalism shadow overrides */
+  .shadow-sm,
+  .shadow-inner {
+    box-shadow: 2px 2px 0px 0px var(--color-neo-dark) !important;
+  }
+  .shadow-md {
+    box-shadow: 4px 4px 0px 0px var(--color-neo-dark) !important;
+  }
+  .shadow,
+  .shadow-lg {
+    box-shadow: 6px 6px 0px 0px var(--color-neo-dark) !important;
+  }
+  .shadow-xl {
+    box-shadow: 8px 8px 0px 0px var(--color-neo-dark) !important;
+  }
+  .shadow-2xl {
+    box-shadow: 12px 12px 0px 0px var(--color-neo-dark) !important;
+  }
+}
+
+/* Also ensure form elements and common containers have dark borders */
+input,
+select,
+textarea,
+button {
+  border-color: var(--color-neo-dark) !important;
 }

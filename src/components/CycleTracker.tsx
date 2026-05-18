@@ -121,7 +121,7 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
     if (currentDayOfCycle < periodLength) {
       currentPhaseInfo = { 
         name: 'Mùa Dâu Rụng', 
-        color: 'from-rose-600 to-red-700', 
+        color: 'from-orange-600 to-orange-700', 
         desc: 'Cần nghỉ ngơi, ủ ấm và ăn đồ ngọt!', 
         icon: <Droplets className="w-8 h-8 text-white drop-shadow-md" /> 
       };
@@ -135,14 +135,14 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
     } else if (currentDayOfCycle < ovulationStart) {
       currentPhaseInfo = { 
         name: 'Ngày Bình Yên (Nang Noãn)', 
-        color: 'from-emerald-600 to-teal-700', 
+        color: 'from-neutral-600 to-teal-700', 
         desc: 'Năng lượng dồi dào, tâm trạng tươi tắn chốt đơn!', 
         icon: <Wind className="w-8 h-8 text-white drop-shadow-md" /> 
       };
     } else {
       currentPhaseInfo = { 
         name: 'Ngày Chờ Đợi (Hoàng Thể)', 
-        color: 'from-sky-600 to-indigo-700', 
+        color: 'from-neutral-600 to-neutral-700', 
         desc: 'Dễ dỗi hờn, thèm ăn, cần được cưng chiều nha.', 
         icon: <Heart className="w-8 h-8 text-white drop-shadow-md" /> 
       };
@@ -157,8 +157,8 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-display font-bold text-rose-600 tracking-tight flex items-center gap-3">
-            <Heart className="w-8 h-8 fill-rose-100" />
+          <h2 className="text-3xl font-display font-bold text-orange-600 tracking-tight flex items-center gap-3">
+            <Heart className="w-8 h-8 fill-orange-100" />
             Lịch Dâu Chị Em
           </h2>
           <p className="text-neutral-500 mt-1">Nơi dự đoán ngày rụng dâu, rụng trứng và năng lượng hiện tại.</p>
@@ -169,20 +169,20 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`rounded-3xl p-6 md:p-8 text-white shadow-xl shadow-rose-500/10 bg-gradient-to-r ${currentPhaseInfo.color} relative overflow-hidden`}
+          className={`rounded-3xl p-6 md:p-8 text-white shadow-xl shadow-orange-500/10 bg-gradient-to-r ${currentPhaseInfo.color} relative overflow-hidden`}
         >
           <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
           <div className="absolute left-0 bottom-0 w-48 h-48 bg-black/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4"></div>
           
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-            <div className="flex flex-col items-center justify-center shrink-0 w-32 h-32 rounded-full border-4 border-white/30 bg-white/10 shadow-inner backdrop-blur-sm relative">
+            <div className="flex flex-col items-center justify-center shrink-0 w-32 h-32 rounded-full bg-white/10 border-4 border-white/30 bg-white/10 shadow-inner backdrop-blur-sm relative">
               <span className="text-xs font-bold uppercase tracking-widest text-white/80 absolute top-4">Ngày</span>
               <span className="text-5xl font-display font-black leading-none mt-2">{currentDayOfCycle + 1}</span>
               <span className="text-xs font-medium text-white/80 absolute bottom-4">/{cycleLength}</span>
             </div>
             
             <div className="text-center md:text-left space-y-2">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md mb-2">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/20 bg-white/20 backdrop-blur-md mb-2">
                 {currentPhaseInfo.icon}
               </div>
               <h3 className="text-2xl font-bold font-display drop-shadow-sm">{currentPhaseInfo.name}</h3>
@@ -205,7 +205,7 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
                 type="date"
                 value={lastPeriod}
                 onChange={(e) => setLastPeriod(e.target.value)}
-                className="w-full bg-rose-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-rose-200 transition-all font-medium text-neutral-800"
+                className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
               />
             </div>
             <div className="space-y-2">
@@ -216,7 +216,7 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
                 min={20}
                 max={45}
                 onChange={(e) => setCycleLength(parseInt(e.target.value) || 0)}
-                className="w-full bg-rose-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-rose-200 transition-all font-medium text-neutral-800"
+                className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
               />
             </div>
             <div className="space-y-2">
@@ -227,20 +227,20 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
                 min={1}
                 max={15}
                 onChange={(e) => setPeriodLength(parseInt(e.target.value) || 0)}
-                className="w-full bg-rose-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-rose-200 transition-all font-medium text-neutral-800"
+                className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
               />
             </div>
 
             {user && (
-              <label className="flex items-center gap-3 p-3 bg-rose-50/50 rounded-xl cursor-pointer hover:bg-rose-50 transition-colors">
+              <label className="flex items-center gap-3 p-3 bg-orange-50/50 rounded-3xl cursor-pointer hover:bg-orange-50 transition-colors">
                 <input 
                   type="checkbox"
                   checked={shareWithFamily}
                   onChange={(e) => setShareWithFamily(e.target.checked)}
-                  className="w-5 h-5 text-rose-500 rounded border-gray-300 focus:ring-rose-500"
+                  className="w-5 h-5 text-orange-500 rounded border-gray-300 focus:ring-orange-500"
                 />
                 <div className="flex flex-col">
-                  <span className="text-sm font-bold text-neutral-900 flex items-center gap-1"><Users className="w-4 h-4 text-rose-500"/> Share cho "người ấy"</span>
+                  <span className="text-sm font-bold text-neutral-900 flex items-center gap-1"><Users className="w-4 h-4 text-orange-500"/> Share cho "người ấy"</span>
                   <span className="text-xs text-neutral-500">Cho người trong nhóm gia đình biết để cưng chiều bạn hơn.</span>
                 </div>
               </label>
@@ -248,39 +248,39 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
             
             <button 
               onClick={handleSave}
-              className="w-full mt-4 flex items-center justify-center gap-2 py-3 px-6 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-xl transition-all shadow-md shadow-rose-500/20"
+              className="w-full mt-4 flex items-center justify-center gap-2 py-3 px-6 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-3xl transition-all shadow-md shadow-orange-500/20"
             >
               Lưu & Cập nhật Dữ Liệu
             </button>
           </div>
 
-          <div className="bg-gradient-to-br from-rose-100 to-pink-50 rounded-2xl p-6 border border-rose-200 shadow-inner flex flex-col justify-center">
+          <div className="bg-neo-bg rounded-3xl p-6 border border-orange-200 shadow-inner flex flex-col justify-center">
             {isPredictable ? (
               <div className="space-y-6 text-center">
                 <div>
-                  <p className="text-rose-600 font-semibold mb-1">Dự báo lần rớt dâu tiếp theo</p>
-                  <p className="text-3xl font-display font-bold text-rose-900">
+                  <p className="text-orange-600 font-semibold mb-1">Dự báo lần rớt dâu tiếp theo</p>
+                  <p className="text-3xl font-display font-bold text-orange-900">
                     {format(nextPeriodDate, 'dd/MM/yyyy')}
                   </p>
-                  <div className="mt-4 inline-flex items-center gap-2 bg-white/60 px-4 py-2 rounded-full text-rose-700 font-medium">
-                    <CalendarIcon className="w-5 h-5 text-rose-500" />
+                  <div className="mt-4 inline-flex items-center gap-2 bg-white/60 px-4 py-2 rounded-3xl text-orange-700 font-medium">
+                    <CalendarIcon className="w-5 h-5 text-orange-500" />
                     <span>Còn {daysUntilNext} ngày nữa</span>
                   </div>
                 </div>
 
-                <div className="h-px bg-rose-200 w-2/3 mx-auto"></div>
+                <div className="h-px bg-orange-200 w-2/3 mx-auto"></div>
 
                 <div>
-                  <p className="text-pink-600 font-semibold mb-1 flex items-center justify-center gap-1">
+                  <p className="text-orange-600 font-semibold mb-1 flex items-center justify-center gap-1">
                     <Sparkles className="w-4 h-4" /> Cửa sổ rụng trứng (Cẩn thận nha)
                   </p>
-                  <p className="text-lg font-bold text-pink-900">
+                  <p className="text-lg font-bold text-orange-900">
                     Khoảng {format(addDays(ovulationDate, -2), 'dd/MM')} - {format(addDays(ovulationDate, 2), 'dd/MM')}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="text-center text-rose-400">
+              <div className="text-center text-orange-400">
                 <Info className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p>Vui lòng điền đủ thông tin để xem dự báo</p>
               </div>
@@ -289,7 +289,7 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
         </div>
       </motion.div>
       
-      <div className="bg-white/50 backdrop-blur-sm border border-neutral-200 p-6 rounded-2xl text-sm leading-relaxed text-neutral-600 flex gap-4 items-start">
+      <div className="bg-white/50 backdrop-blur-sm border border-neutral-200 p-6 rounded-3xl text-sm leading-relaxed text-neutral-600 flex gap-4 items-start">
         <Info className="w-6 h-6 text-neutral-400 shrink-0" />
         <p>
           <strong>Lưu ý nhỏ:</strong> Dữ liệu đã lưu sẽ được đồng bộ cùng với Quỹ gia đình. Tuy nhiên, việc dự đoán chỉ mang tính chất tham khảo vui vẻ, không thay thế cho các tư vấn y khoa chuyên nghiệp đâu nhé.

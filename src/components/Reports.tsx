@@ -7,7 +7,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { format, parseISO, startOfMonth, formatISO, startOfYear, getYear, getMonth, isSameYear, isSameMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileText, Calendar as CalendarIcon, TrendingUp, TrendingDown, LayoutGrid, Download } from 'lucide-react';
+import { FileText, Calendar as CalendarIcon, TrendingUp, TrendingDown, LayoutGrid, Download, Share2 } from 'lucide-react';
+import { useCurrency } from '../lib/CurrencyContext';
 
 interface ReportsProps {
   transactions: Transaction[];
@@ -16,14 +17,16 @@ interface ReportsProps {
 
 type ReportView = 'monthly' | 'yearly';
 
-export default function Reports({ transactions, chartPalette = 'default' }: ReportsProps) {
+export default function Reports({ transactions, chartPalette = 'default', setChartPalette }: ReportsProps & { setChartPalette?: (c: string) => void }) {
+  const { formatMoney } = useCurrency();
   const [view, setView] = useState<ReportView>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [breakdownType, setBreakdownType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [isExporting, setIsExporting] = useState(false);
   
   // Customization state
-  const [activePalette, setActivePalette] = useState(chartPalette || 'default');
+  const activePalette = chartPalette || 'default';
+  const setActivePalette = setChartPalette || (() => {});
   const [overviewChartType, setOverviewChartType] = useState<'bar' | 'area'>('bar');
   
   const reportRef = useRef<HTMLDivElement>(null);
@@ -55,6 +58,35 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
       console.error('Error generating PDF:', error);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleShareReport = async () => {
+    // Generate text summary based on either the selected year (if 'monthly') or all time (if 'yearly')
+    const totalIncomeText = formatMoney(totalIncome);
+    const totalExpenseText = formatMoney(totalExpense);
+    const totalSavingsText = formatMoney(totalSavings);
+    const timeframeText = view === 'monthly' ? `Năm ${selectedYear}` : 'Tất cả các năm';
+
+    const summaryText = `Báo Cáo Tài Chính - ${timeframeText}:
+- Tổng Thu: ${totalIncomeText}
+- Tổng Chi: ${totalExpenseText}
+- Tích Lũy: ${totalSavingsText}
+
+Được tạo từ Fintro Pro!`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Báo Cáo Tài Chính - Fintro Pro`,
+          text: summaryText,
+        });
+      } catch (err) {
+        console.error('Error sharing report', err);
+      }
+    } else {
+      const mailtoLink = `mailto:?subject=${encodeURIComponent('Báo Cáo Tài Chính - Fintro Pro')}&body=${encodeURIComponent(summaryText)}`;
+      window.open(mailtoLink, '_blank');
     }
   };
 
@@ -186,7 +218,7 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-4 rounded-2xl shadow-xl border border-neutral-100">
+        <div className="bg-white p-4 rounded-3xl shadow-xl border border-neutral-100">
           <p className="text-sm font-bold text-neutral-900 mb-3">{label}</p>
           {payload.map((entry: any, index: number) => {
             const isIncome = entry.dataKey === 'income';
@@ -194,9 +226,9 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
             const isSavings = entry.dataKey === 'savings';
             
             let colorClass = 'text-neutral-900';
-            if (isIncome) colorClass = 'text-green-600';
-            if (isExpense) colorClass = 'text-red-500';
-            if (isSavings) colorClass = 'text-indigo-600';
+            if (isIncome) colorClass = 'text-neutral-600';
+            if (isExpense) colorClass = 'text-orange-500';
+            if (isSavings) colorClass = 'text-neutral-600';
 
             let labelText = '';
             if (isIncome) labelText = 'Tổng Thu';
@@ -207,7 +239,7 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
               <div key={index} className="flex items-center justify-between gap-6 mb-1.5 last:mb-0">
                 <span className="text-xs font-semibold text-neutral-500">{labelText}</span>
                 <span className={`text-sm font-mono font-bold ${colorClass}`}>
-                  {entry.value.toLocaleString()}đ
+                  {formatMoney(entry.value)}
                 </span>
               </div>
             );
@@ -228,37 +260,44 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
         
         <div className="flex items-center gap-4">
             {/* Customization controls */}
-            <select value={activePalette} onChange={(e) => setActivePalette(e.target.value)} className="bg-neutral-100 text-sm font-bold text-neutral-900 rounded-xl px-4 py-2 border-none outline-none">
+            <select value={activePalette} onChange={(e) => setActivePalette(e.target.value)} className="bg-neutral-100 text-sm font-bold text-neutral-900 rounded-3xl px-4 py-2 border-none outline-none">
                 <option value="default">Mặc định</option>
                 <option value="ocean">Đại dương</option>
                 <option value="sunset">Hoàng hôn</option>
                 <option value="pastel">Pastel</option>
                 <option value="monochrome">Đơn sắc</option>
             </select>
-            <div className="flex bg-neutral-100 p-1 rounded-2xl">
-                <button onClick={() => setOverviewChartType('bar')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${overviewChartType === 'bar' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Cột</button>
-                <button onClick={() => setOverviewChartType('area')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${overviewChartType === 'area' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Vùng</button>
+            <div className="flex bg-neutral-100 p-1 rounded-3xl">
+                <button onClick={() => setOverviewChartType('bar')} className={`px-4 py-2 rounded-3xl text-xs font-bold transition-all ${overviewChartType === 'bar' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Cột</button>
+                <button onClick={() => setOverviewChartType('area')} className={`px-4 py-2 rounded-3xl text-xs font-bold transition-all ${overviewChartType === 'area' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400'}`}>Vùng</button>
             </div>
             {/* End customization controls */}
 
           <button
+            onClick={handleShareReport}
+            className="flex items-center gap-2 px-6 py-2 rounded-3xl text-sm font-bold bg-neutral-50 text-neutral-700 hover:bg-neutral-100 transition-colors"
+          >
+            <Share2 className="w-4 h-4" />
+            Chia sẻ
+          </button>
+          <button
             onClick={handleExportPDF}
             disabled={isExporting}
-            className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2 rounded-3xl text-sm font-bold bg-neutral-50 text-neutral-700 hover:bg-neutral-100 transition-colors disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             {isExporting ? 'Đang xuất...' : 'Xuất PDF'}
           </button>
-          <div className="flex bg-neutral-100 p-1 rounded-2xl">
+          <div className="flex bg-neutral-100 p-1 rounded-3xl">
             <button
               onClick={() => setView('monthly')}
-              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${view === 'monthly' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'}`}
+              className={`px-6 py-2 rounded-3xl text-sm font-bold transition-all ${view === 'monthly' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
               Theo Tháng
             </button>
             <button
               onClick={() => setView('yearly')}
-              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${view === 'yearly' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'}`}
+              className={`px-6 py-2 rounded-3xl text-sm font-bold transition-all ${view === 'yearly' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-600'}`}
             >
               Theo Năm
             </button>
@@ -275,7 +314,7 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
           className="space-y-8"
         >
           {view === 'monthly' && (
-            <div className="flex items-center gap-4 bg-white px-6 py-4 border border-neutral-200/60 rounded-2xl w-max shadow-sm">
+            <div className="flex items-center gap-4 bg-white px-6 py-4 border border-neutral-200/60 rounded-3xl w-max shadow-sm">
                <CalendarIcon className="w-5 h-5 text-neutral-400" />
                <select 
                   value={selectedYear}
@@ -292,37 +331,37 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="card p-6 md:p-8 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-6 opacity-5">
-                <TrendingUp className="w-24 h-24 text-green-500" />
+                <TrendingUp className="w-24 h-24 text-neutral-500" />
               </div>
               <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 relative z-10">Tổng Thu</p>
               <div className="flex items-center gap-2 relative z-10">
-                <span className="text-3xl font-display font-bold text-green-600">+{totalIncome.toLocaleString()}đ</span>
+                <span className="text-3xl font-display font-bold text-neutral-600">+{formatMoney(totalIncome)}</span>
               </div>
             </div>
             
             <div className="card p-6 md:p-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 p-6 opacity-5">
-                <TrendingDown className="w-24 h-24 text-red-500" />
+                <TrendingDown className="w-24 h-24 text-orange-500" />
               </div>
               <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 relative z-10">Tổng Chi</p>
               <div className="flex items-center gap-2 relative z-10">
-                <span className="text-3xl font-display font-bold text-red-500">-{totalExpense.toLocaleString()}đ</span>
+                <span className="text-3xl font-display font-bold text-orange-500">-{formatMoney(totalExpense)}</span>
               </div>
             </div>
 
-            <div className={`${totalSavings >= 0 ? 'bg-indigo-600 text-white' : 'bg-red-500 text-white'} p-6 md:p-8 rounded-[2rem] shadow-xl relative overflow-hidden`}>
+            <div className={`${totalSavings >= 0 ? 'bg-neutral-600 text-white' : 'bg-orange-500 text-white'} p-6 md:p-8 rounded-3xl shadow-xl relative overflow-hidden`}>
                <div className="absolute top-0 right-0 p-6 opacity-10">
                 <FileText className="w-24 h-24 text-white" />
               </div>
               <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-2 relative z-10">Tích Lũy Bằng Tiền</p>
               <div className="flex items-center gap-2 relative z-10">
-                <span className="text-3xl font-display font-bold">{totalSavings > 0 ? '+' : ''}{totalSavings.toLocaleString()}đ</span>
+                <span className="text-3xl font-display font-bold">{totalSavings > 0 ? '+' : ''}{formatMoney(totalSavings)}</span>
               </div>
             </div>
           </div>
 
           <div className="card p-6 sm:p-10">
-            <h3 className="text-xl font-bold text-neutral-900 mb-8 border-l-4 border-indigo-600 pl-4 inset-y-1">Biểu đồ tổng quan</h3>
+            <h3 className="text-xl font-bold text-neutral-900 mb-8 border-l-4 border-neutral-600 pl-4 inset-y-1">Biểu đồ tổng quan</h3>
             
             <div className="h-80 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -385,7 +424,7 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
           </div>
 
           <div className="card p-6 sm:p-10">
-            <h3 className="text-xl font-bold text-neutral-900 mb-2 border-l-4 border-indigo-600 pl-4 inset-y-1">Chi tiêu theo ngày (Tháng này)</h3>
+            <h3 className="text-xl font-bold text-neutral-900 mb-2 border-l-4 border-neutral-600 pl-4 inset-y-1">Chi tiêu theo ngày (Tháng này)</h3>
             <p className="text-sm text-neutral-400 mb-8 ml-5">Xu hướng chi tiêu trong 30 ngày gần nhất</p>
             
             <div className="h-72 w-full">
@@ -451,17 +490,17 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
           <div className="card p-6 sm:p-10">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-8">
               <div>
-                <h3 className="text-xl font-bold text-neutral-900 mb-1 border-l-4 border-indigo-600 pl-4 inset-y-1">Phân loại theo danh mục</h3>
+                <h3 className="text-xl font-bold text-neutral-900 mb-1 border-l-4 border-neutral-600 pl-4 inset-y-1">Phân loại theo danh mục</h3>
                 <p className="text-sm text-neutral-400 sm:ml-5">Tổng hợp từ lúc khởi tạo đến nay</p>
               </div>
-              <div className="flex items-center gap-1 p-1 bg-neutral-100 rounded-xl">
+              <div className="flex items-center gap-1 p-1 bg-neutral-100 rounded-3xl">
                  <button 
                     onClick={() => setBreakdownType(TransactionType.EXPENSE)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${breakdownType === TransactionType.EXPENSE ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
+                    className={`px-4 py-1.5 rounded-3xl text-xs font-bold transition-all ${breakdownType === TransactionType.EXPENSE ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
                  >Chi</button>
                  <button 
                     onClick={() => setBreakdownType(TransactionType.INCOME)}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${breakdownType === TransactionType.INCOME ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
+                    className={`px-4 py-1.5 rounded-3xl text-xs font-bold transition-all ${breakdownType === TransactionType.INCOME ? 'bg-white shadow-sm text-neutral-900' : 'text-neutral-400 hover:text-neutral-600'}`}
                  >Thu</button>
               </div>
             </div>
@@ -482,7 +521,7 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
                     </Pie>
                     <Tooltip 
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
-                      formatter={(value: number) => `${value.toLocaleString()}đ`}
+                      formatter={(value: number) => formatMoney(value)}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -499,9 +538,9 @@ export default function Reports({ transactions, chartPalette = 'default' }: Repo
                         {((entry.value / currentTotal) * 100 || 0).toFixed(0)}%
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-neutral-100 rounded-3xl overflow-hidden">
                       <div 
-                        className="h-full rounded-full" 
+                        className="h-full rounded-3xl" 
                         style={{ 
                            width: `${((entry.value / currentTotal) * 100 || 0)}%`,
                            backgroundColor: COLORS[index % COLORS.length]

@@ -170,6 +170,23 @@ service cloud.firestore {
         && data.createdAt != null;
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll(['type', 'title', 'description', 'time', 'read', 'createdAt'])
+        && data.type is string
+        && data.title is string
+        && data.description is string
+        && data.time is string
+        && data.read is bool
+        && data.createdAt is number;
+    }
+
+    match /users/{userId}/notifications/{notificationId} {
+      allow list, get: if isOwner(userId);
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming());
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
     match /friendRequests/{requestId} {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId);
@@ -209,6 +226,23 @@ service cloud.firestore {
     
     match /calls/{callId}/{colName}/{docId} {
       allow read, write: if isSignedIn();
+    }
+
+    // System Configs
+    match /system/{systemDocId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Game Rooms (Short Code Matchmaking)
+    match /game_rooms/{roomId} {
+      allow read, write: if isSignedIn();
+    }
+    
+    // Config
+    match /config/drive {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
     }
 
     // Global Categories
@@ -284,6 +318,21 @@ service cloud.firestore {
         allow create: if isSignedIn() && incoming().authorId == request.auth.uid;
         allow update, delete: if isSignedIn() && (existing().authorId == request.auth.uid || isAdmin());
       }
+    }
+
+    function isValidPhoto(data) {
+      return data.keys().hasAll(['url', 'createdBy', 'createdAt', 'description'])
+        && data.keys().size() == 4
+        && data.url is string && data.url.size() > 0 && data.url.size() <= 1048576 // ~1MB limit for base64
+        && data.description is string && data.description.size() <= 1000
+        && data.createdBy == request.auth.uid;
+    }
+
+    match /photos/{photoId} {
+      allow list, get: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(photoId) && isValidPhoto(incoming());
+      allow update: if isSignedIn() && existing().createdBy == request.auth.uid && isValidPhoto(incoming());
+      allow delete: if isSignedIn() && (existing().createdBy == request.auth.uid || isAdmin());
     }
   }
 }

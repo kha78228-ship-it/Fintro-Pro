@@ -86,9 +86,58 @@
         "questions": { "type": "array" },
         "authorId": { "type": "string" }
       }
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "Shared photo album",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "object" }
+      },
+      "required": ["url", "createdBy", "createdAt", "description"]
+    },
+    "SystemAnnouncement": {
+      "title": "System Announcement",
+      "description": "Global system announcement settings",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "isMarquee": { "type": "boolean" },
+        "textColor": { "type": "string" },
+        "backgroundColor": { "type": "string" },
+        "fontFamily": { "type": "string" },
+        "fontSize": { "type": "number" },
+        "show": { "type": "boolean" },
+        "updatedAt": { "type": "object" }
+      }
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "time": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["type", "title", "description", "time", "read", "createdAt"]
     }
   },
   "firestore": {
+    "/system/{systemDocId}": {
+       "schema": "SystemAnnouncement",
+       "description": "System-wide configs and announcements"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    },
     "/couple_data/{dataId}": {
        "schema": "CoupleData",
        "description": "Couple specific shared data like games or questions"
@@ -116,6 +165,10 @@
     "/categories/{categoryId}": {
       "schema": "Category",
       "description": "System or global categories"
+    },
+    "/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Shared photo album photos"
     }
   }
 }

@@ -6,12 +6,14 @@ import { collection, query, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { Target, Plus, Trash2, Edit2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useCurrency } from '../lib/CurrencyContext';
 
 interface BudgetsProps {
   transactions: any[];
 }
 
 export default function Budgets({ transactions }: BudgetsProps) {
+  const { formatMoney } = useCurrency();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newBudget, setNewBudget] = useState({ categoryId: DEFAULT_CATEGORIES[0].id, amount: '' });
@@ -68,7 +70,7 @@ export default function Budgets({ transactions }: BudgetsProps) {
         </div>
         <button 
           onClick={() => setIsAdding(!isAdding)}
-          className="flex items-center gap-2 text-sm font-semibold py-3 px-5 bg-neutral-900 text-white rounded-xl shadow-md hover:bg-neutral-800 transition-all pointer-events-auto"
+          className="flex items-center gap-2 text-sm font-semibold py-3 px-5 bg-neutral-900 text-white rounded-3xl shadow-md hover:bg-neutral-800 transition-all pointer-events-auto"
         >
           {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {isAdding ? 'Hủy' : 'Thêm ngân sách'}
@@ -80,37 +82,72 @@ export default function Budgets({ transactions }: BudgetsProps) {
           initial={{ opacity: 0, height: 0, y: -20 }}
           animate={{ opacity: 1, height: 'auto', y: 0 }}
           exit={{ opacity: 0, height: 0, y: -20 }}
-          className="bg-white p-6 rounded-3xl shadow-lg border border-neutral-100 space-y-5 relative overflow-hidden"
+          className="bg-white p-6 md:p-8 rounded-3xl shadow-xl shadow-neutral-900/5 border border-neutral-200 space-y-8 relative overflow-hidden"
         >
-          <div className="absolute top-0 left-0 w-1/2 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-r-full"></div>
-          <h3 className="text-lg font-bold">Thêm ngân sách mới</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Danh mục</label>
-               <select 
-                 value={newBudget.categoryId}
-                 onChange={e => setNewBudget({...newBudget, categoryId: e.target.value})}
-                 className="w-full bg-neutral-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-neutral-800"
-               >
-                 {DEFAULT_CATEGORIES.filter(c => c.type === 'expense' || c.type === 'both').map(c => (
-                   <option key={c.id} value={c.id}>{c.name}</option>
-                 ))}
-               </select>
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-bold font-display text-neutral-900">Thêm ngân sách mới</h3>
+            <button onClick={() => setIsAdding(false)} className="p-2 bg-neutral-50 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-full transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="space-y-8">
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">1. Chọn danh mục</label>
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 gap-2">
+                {DEFAULT_CATEGORIES.filter(c => c.type === 'expense' || c.type === 'both').map(c => {
+                  const isAlreadyBudgeted = budgets.some(b => b.categoryId === c.id);
+                  return (
+                  <button
+                    key={c.id}
+                    disabled={isAlreadyBudgeted}
+                    onClick={() => setNewBudget({...newBudget, categoryId: c.id})}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl transition-all ${newBudget.categoryId === c.id ? 'bg-neutral-900 border-neutral-900 shadow-md text-white' : isAlreadyBudgeted ? 'bg-neutral-50/50 border-neutral-100 text-neutral-300 cursor-not-allowed grayscale' : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer active:scale-95'} border`}
+                  >
+                    <span className="text-2xl mb-1.5">{c.icon}</span>
+                    <span className="text-[10px] font-bold text-center leading-tight line-clamp-1">{c.name}</span>
+                  </button>
+                )})}
+              </div>
             </div>
-            <div className="space-y-2">
-               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Số tiền giới hạn</label>
-               <input 
-                 type="number"
-                 placeholder="0 ₫"
-                 value={newBudget.amount}
-                 onChange={e => setNewBudget({...newBudget, amount: e.target.value})}
-                 className="w-full bg-neutral-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 transition-all font-mono font-bold text-neutral-900"
-               />
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">2. Số tiền giới hạn</label>
+              <div className="relative">
+                <input 
+                  type="number"
+                  placeholder="0"
+                  value={newBudget.amount}
+                  onChange={e => setNewBudget({...newBudget, amount: e.target.value})}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-5 pl-6 pr-16 outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-mono font-bold text-neutral-900 text-2xl md:text-3xl"
+                />
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 font-bold text-neutral-400">VNĐ</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[500000, 1000000, 2000000, 5000000].map(amt => (
+                  <button 
+                    key={amt}
+                    onClick={() => setNewBudget({...newBudget, amount: ((Number(newBudget.amount) || 0) + amt).toString()})}
+                     className="px-4 py-2 bg-neutral-100 text-neutral-700 rounded-3xl text-sm font-bold hover:bg-neutral-200 transition-colors border border-transparent active:border-neutral-300"
+                  >
+                    +{formatMoney(amt)}
+                  </button>
+                ))}
+                <button 
+                  onClick={() => setNewBudget({...newBudget, amount: ''})}
+                  className="px-4 py-2 bg-white border border-neutral-200 text-neutral-500 rounded-3xl text-sm font-bold hover:bg-neutral-50 hover:text-neutral-700 transition-colors sm:ml-auto"
+                >
+                  Nhập lại
+                </button>
+              </div>
             </div>
           </div>
-          <div className="flex gap-2 justify-end pt-2">
-             <button onClick={() => setIsAdding(false)} className="px-4 py-2 text-sm font-bold text-neutral-500 hover:text-neutral-800 transition-colors">Hủy</button>
-             <button onClick={handleAddBudget} disabled={!newBudget.amount || parseFloat(newBudget.amount) <= 0} className="bg-indigo-600 text-white font-bold px-6 py-2 rounded-xl shadow hover:bg-indigo-700 transition disabled:opacity-50">Lưu ngân sách</button>
+          
+          <div className="pt-6 border-t border-neutral-100 flex justify-end">
+             <button onClick={handleAddBudget} disabled={!newBudget.amount || parseFloat(newBudget.amount) <= 0} className="w-full sm:w-auto bg-neutral-900 text-white font-bold px-8 py-3.5 rounded-3xl shadow-lg shadow-neutral-900/20 hover:bg-neutral-800 transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2 active:scale-95">
+               <Plus className="w-5 h-5" />
+               Lưu ngân sách
+             </button>
           </div>
         </motion.div>
       )}
@@ -136,15 +173,15 @@ export default function Budgets({ transactions }: BudgetsProps) {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: idx * 0.05 }}
                 key={budget.id} 
-                className={`p-6 rounded-3xl bg-white shadow-sm border transition-shadow hover:shadow-md relative overflow-hidden ${isOver ? 'border-red-200 bg-red-50/30' : 'border-neutral-100'}`}
+                className={`p-6 rounded-3xl bg-white shadow-sm border transition-shadow hover:shadow-md relative overflow-hidden ${isOver ? 'border-orange-200 bg-orange-50/30' : 'border-neutral-100'}`}
               >
                 {isOver && (
-                   <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/10 rounded-bl-full"></div>
+                   <div className="absolute top-0 right-0 absolute top-0 right-0 w-16 h-16 bg-orange-500/10 rounded-full"></div>
                 )}
                 
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-inner ${isOver ? 'bg-red-100 text-red-500' : 'bg-neutral-100 text-neutral-600'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-inner ${isOver ? 'bg-orange-100 text-orange-500' : 'bg-neutral-100 text-neutral-600'}`}>
                       {category?.icon || '🎯'}
                     </div>
                     <div>
@@ -154,7 +191,7 @@ export default function Budgets({ transactions }: BudgetsProps) {
                   </div>
                   <button 
                     onClick={() => budget.id && handleDeleteBudget(budget.id)}
-                    className="p-2 -mr-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-2 -mr-2 text-neutral-300 hover:text-orange-500 hover:bg-orange-50 rounded-3xl transition-colors"
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
@@ -165,31 +202,31 @@ export default function Budgets({ transactions }: BudgetsProps) {
                      <div className="flex justify-between items-end mb-2">
                         <span className="text-sm font-semibold text-neutral-500">Đã chi tiêu</span>
                         <div className="text-right">
-                           <span className={`text-xl font-display font-black leading-none ${isOver ? 'text-red-600' : 'text-neutral-900'}`}>
-                              {spent.toLocaleString()}đ
+                           <span className={`text-xl font-display font-black leading-none ${isOver ? 'text-orange-600' : 'text-neutral-900'}`}>
+                              {formatMoney(spent)}
                            </span>
-                           <span className="text-neutral-400 text-sm font-medium ml-1">/ {budget.amount.toLocaleString()}đ</span>
+                           <span className="text-neutral-400 text-sm font-medium ml-1">/ {formatMoney(budget.amount)}</span>
                         </div>
                      </div>
-                     <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
+                     <div className="h-3 bg-neutral-100 rounded-3xl overflow-hidden">
                        <motion.div 
                          key={percent}
                          initial={{ width: 0 }}
                          animate={{ width: `${percent}%` }}
                          transition={{ duration: 1, ease: "easeOut" }}
-                         className={`h-full rounded-full ${isOver ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : percent >= 80 ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]'}`}
+                         className={`h-full rounded-3xl ${isOver ? 'bg-orange-500 shadow-md' : percent >= 80 ? 'bg-orange-500 shadow-md' : 'bg-neutral-500 shadow-md'}`}
                        />
                      </div>
                   </div>
                   
-                  <div className="flex justify-between items-center rounded-xl bg-neutral-50 p-3 border border-neutral-100/50">
+                  <div className="flex justify-between items-center rounded-3xl bg-neutral-50 p-3 border border-neutral-100/50">
                     <div className="flex flex-col">
                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider mb-0.5">Còn lại</span>
-                       <span className={`font-mono font-bold ${remaining === 0 ? 'text-red-500' : 'text-emerald-600'}`}>{remaining.toLocaleString()}đ</span>
+                       <span className={`font-mono font-bold ${remaining === 0 ? 'text-orange-500' : 'text-neutral-600'}`}>{formatMoney(remaining)}</span>
                     </div>
                     <div className="flex flex-col items-end">
                        <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider mb-0.5">Tiến độ</span>
-                       <span className={`font-bold text-sm ${isOver ? 'text-red-500' : percent >= 80 ? 'text-amber-500' : 'text-neutral-700'}`}>{percent.toFixed(1)}%</span>
+                       <span className={`font-bold text-sm ${isOver ? 'text-orange-500' : percent >= 80 ? 'text-orange-500' : 'text-neutral-700'}`}>{percent.toFixed(1)}%</span>
                     </div>
                   </div>
                 </div>
@@ -208,7 +245,7 @@ export default function Budgets({ transactions }: BudgetsProps) {
               <p className="text-neutral-400 text-sm mt-1 max-w-sm text-center">Thiết lập ngân sách giúp bạn kiểm soát chi tiêu tốt hơn cho từng danh mục cụ thể.</p>
               <button 
                   onClick={() => setIsAdding(true)}
-                  className="mt-6 font-bold text-indigo-600 bg-indigo-50 px-6 py-2 rounded-xl transition-all hover:bg-indigo-100"
+                  className="mt-6 font-bold text-neutral-600 bg-neutral-50 px-6 py-2 rounded-3xl transition-all hover:bg-neutral-100"
               >
                   Tạo ngân sách đầu tiên
               </button>

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, MessageCircle, Send, ImageIcon, Video as VideoIcon, Loader2, X, MoreVertical, Trash2 } from 'lucide-react';
-import { db, storage } from '../lib/firebase';
-import { doc, setDoc, deleteDoc, collection, query, onSnapshot, serverTimestamp, orderBy, addDoc, getCountFromServer, getDocs } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { Heart, MessageCircle, Send, Trash2 } from 'lucide-react';
+import { db } from '../lib/firebase';
+import { doc, setDoc, deleteDoc, collection, query, onSnapshot, serverTimestamp, orderBy, addDoc, getDocs } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import AIAvatar from './AIAvatar';
 
@@ -17,9 +16,6 @@ export default function SocialFeed({ user, userProfile }: SocialFeedProps) {
   const [usersInfo, setUsersInfo] = useState<Record<string, any>>({});
   
   const [newPostText, setNewPostText] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Load posts
   useEffect(() => {
@@ -43,46 +39,21 @@ export default function SocialFeed({ user, userProfile }: SocialFeedProps) {
     return () => unsub();
   }, [user]);
 
-  const handleCreatePost = async (file?: File) => {
-    if (!newPostText.trim() && !file) return;
+  const handleCreatePost = async () => {
+    if (!newPostText.trim()) return;
     
     try {
-      setIsUploading(true);
-      let mediaUrl = null;
-      let mediaType = null;
-      
-      if (file) {
-        if (file.size > 50 * 1024 * 1024) throw new Error("File quá lớn (tối đa 50MB)");
-        mediaType = file.type.startsWith('video/') ? 'video' : 'image';
-        const fileExt = file.name.split('.').pop() || 'tmp';
-        const fileName = `posts/${user.uid}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const storageRef = ref(storage, fileName);
-        
-        const uploadTask = uploadBytesResumable(storageRef, file);
-        mediaUrl = await new Promise((resolve, reject) => {
-          uploadTask.on('state_changed', 
-            (snap) => setUploadProgress((snap.bytesTransferred / snap.totalBytes) * 100),
-            (err) => reject(err),
-            async () => resolve(await getDownloadURL(uploadTask.snapshot.ref))
-          );
-        });
-      }
+      const newPostContent = newPostText.trim();
+      setNewPostText('');
       
       await addDoc(collection(db, 'posts'), {
-        text: newPostText.trim(),
+        text: newPostContent,
         authorId: user.uid,
-        createdAt: serverTimestamp(),
-        mediaUrl,
-        mediaType
+        createdAt: serverTimestamp()
       });
       
-      setNewPostText('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (e: any) {
       alert(e.message || "Lỗi đăng bài!");
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -91,7 +62,7 @@ export default function SocialFeed({ user, userProfile }: SocialFeedProps) {
       {/* Create Post */}
       <div className="card p-4 sm:p-6 shadow-sm border border-neutral-100">
         <div className="flex gap-4">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold shrink-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-neutral-100 text-neutral-600 rounded-full flex items-center justify-center font-bold shrink-0">
              {userProfile?.displayName ? userProfile.displayName[0].toUpperCase() : user.email?.[0].toUpperCase() || 'U'}
           </div>
           <div className="flex-1 space-y-3">
@@ -99,33 +70,16 @@ export default function SocialFeed({ user, userProfile }: SocialFeedProps) {
               value={newPostText}
               onChange={e => setNewPostText(e.target.value)}
               placeholder="Bạn đang nghĩ gì?"
-              className="w-full bg-neutral-50 border-none rounded-xl p-4 focus:ring-2 focus:ring-violet-500 resize-none outline-none min-h-[100px]"
+              className="w-full bg-neutral-50 border-none rounded-3xl p-4 focus:ring-2 focus:ring-neutral-500 resize-none outline-none min-h-[100px]"
             />
             
-            {isUploading && uploadProgress > 0 && (
-              <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
-                 <div className="h-full bg-violet-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <input type="file" accept="image/*,video/*" hidden ref={fileInputRef} onChange={e => {
-                  if (e.target.files?.[0]) handleCreatePost(e.target.files[0]);
-                }} />
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 text-neutral-500 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-colors flex items-center gap-2 text-sm font-medium"
-                >
-                  <ImageIcon className="w-5 h-5" /> Ảnh / Video
-                </button>
-              </div>
+            <div className="flex items-center justify-end">
               <button 
                 onClick={() => handleCreatePost()}
-                disabled={!newPostText.trim() || isUploading}
-                className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
+                disabled={!newPostText.trim()}
+                className="bg-neutral-600 hover:bg-neutral-700 disabled:opacity-50 text-white px-6 py-2 rounded-3xl font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
               >
-                {isUploading ? <Loader2 className="w-5 h-5 animate-spin"/> : <Send className="w-4 h-4 ml-1" /> } 
+                <Send className="w-4 h-4 ml-1" /> 
                 Đăng
               </button>
             </div>
@@ -135,9 +89,19 @@ export default function SocialFeed({ user, userProfile }: SocialFeedProps) {
       
       {/* Posts List */}
       <div className="space-y-6">
-        {posts.map(post => (
-           <PostCard key={post.id} post={post} user={user} usersInfo={usersInfo} />
-        ))}
+        <AnimatePresence>
+          {posts.map(post => (
+             <motion.div
+               key={post.id}
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               transition={{ duration: 0.2 }}
+             >
+               <PostCard post={post} user={user} usersInfo={usersInfo} />
+             </motion.div>
+          ))}
+        </AnimatePresence>
         {posts.length === 0 && (
           <div className="text-center py-20 text-neutral-400">
             <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -216,7 +180,7 @@ const PostCard: React.FC<{ post: any, user: any, usersInfo: any }> = ({ post, us
     <div className="card p-0 shadow-sm border border-neutral-100 overflow-hidden bg-white">
       <div className="p-4 sm:p-5 flex items-start justify-between">
         <div className="flex gap-3 items-center">
-           <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold">
+           <div className="w-10 h-10 bg-neutral-100 text-neutral-600 rounded-full flex items-center justify-center font-bold">
              {author?.displayName ? author.displayName[0].toUpperCase() : author?.email?.[0].toUpperCase() || 'U'}
            </div>
            <div>
@@ -225,23 +189,13 @@ const PostCard: React.FC<{ post: any, user: any, usersInfo: any }> = ({ post, us
            </div>
         </div>
         {post.authorId === user.uid && (
-          <button onClick={handleDeletePost} className="p-2 text-neutral-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 transition-colors">
+          <button onClick={handleDeletePost} className="p-2 text-neutral-400 hover:text-orange-500 rounded-3xl hover:bg-orange-50 transition-colors">
             <Trash2 className="w-4 h-4" />
           </button>
         )}
       </div>
       
       {post.text && <div className="px-4 sm:px-5 pb-4 text-neutral-800 whitespace-pre-wrap leading-relaxed">{post.text}</div>}
-      
-      {post.mediaUrl && (
-        <div className="w-full max-h-[500px] bg-neutral-900 flex items-center justify-center overflow-hidden">
-          {post.mediaType === 'video' ? (
-            <video src={post.mediaUrl} controls className="max-w-full max-h-[500px]" />
-          ) : (
-            <img src={post.mediaUrl} alt="Post media" className="object-contain max-w-full max-h-[500px]" />
-          )}
-        </div>
-      )}
       
       <div className="px-4 sm:px-5 py-3 border-t border-neutral-100 flex items-center justify-between text-sm text-neutral-500">
         <div>{likesCount} Lượt thích</div>
@@ -251,13 +205,13 @@ const PostCard: React.FC<{ post: any, user: any, usersInfo: any }> = ({ post, us
       <div className="px-2 sm:px-3 pb-3 flex items-center gap-1">
         <button 
           onClick={handleLike}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all font-medium ${isLiked ? 'text-rose-500 bg-rose-50' : 'text-neutral-500 hover:bg-neutral-100'}`}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-3xl transition-all font-medium active:scale-95 ${isLiked ? 'text-orange-500 bg-orange-50' : 'text-neutral-500 hover:bg-neutral-100'}`}
         >
           <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} /> Thích
         </button>
         <button 
           onClick={() => setShowComments(!showComments)}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all font-medium ${showComments ? 'text-violet-600 bg-violet-50' : 'text-neutral-500 hover:bg-neutral-100'}`}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-3xl transition-all font-medium active:scale-95 ${showComments ? 'text-neutral-600 bg-neutral-50' : 'text-neutral-500 hover:bg-neutral-100'}`}
         >
           <MessageCircle className="w-5 h-5" /> Bình luận
         </button>
@@ -276,10 +230,10 @@ const PostCard: React.FC<{ post: any, user: any, usersInfo: any }> = ({ post, us
                 const cAuthor = usersInfo[comment.authorId] || {};
                 return (
                   <div key={comment.id} className="flex gap-3">
-                     <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-xs shrink-0">
+                     <div className="w-8 h-8 bg-neutral-100 text-neutral-600 rounded-full flex items-center justify-center font-bold text-xs shrink-0">
                        {cAuthor?.displayName ? cAuthor.displayName[0].toUpperCase() : 'U'}
                      </div>
-                     <div className="bg-white px-4 py-2.5 rounded-2xl rounded-tl-sm shadow-sm border border-neutral-100/50 max-w-[85%]">
+                     <div className="bg-white px-4 py-2.5 rounded-3xl rounded-3xl shadow-sm border border-neutral-100/50 max-w-[85%]">
                        <div className="font-bold text-xs text-neutral-900 mb-0.5">{cAuthor?.displayName || 'Ẩn danh'}</div>
                        <div className="text-sm text-neutral-800 whitespace-pre-wrap">{comment.text}</div>
                      </div>
@@ -295,12 +249,12 @@ const PostCard: React.FC<{ post: any, user: any, usersInfo: any }> = ({ post, us
                    value={newComment}
                    onChange={e => setNewComment(e.target.value)}
                    placeholder="Viết bình luận..."
-                   className="flex-1 bg-neutral-100 border-none rounded-full pl-4 pr-12 py-2.5 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                   className="flex-1 bg-neutral-100 border-none rounded-3xl pl-4 pr-12 py-2.5 text-sm focus:ring-2 focus:ring-neutral-500 outline-none"
                  />
                  <button 
                    type="submit"
                    disabled={!newComment.trim()}
-                   className="absolute right-1 top-1 bottom-1 w-8 bg-violet-600 text-white rounded-full flex items-center justify-center disabled:opacity-50 transition-all hover:bg-violet-700 active:scale-95"
+                   className="absolute right-1 top-1 bottom-1 w-8 bg-neutral-600 text-white rounded-3xl flex items-center justify-center disabled:opacity-50 transition-all hover:bg-neutral-700 active:scale-95"
                  >
                    <Send className="w-3.5 h-3.5 ml-0.5" />
                  </button>

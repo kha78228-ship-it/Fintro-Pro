@@ -65,16 +65,16 @@ export default function DiscoveryDeck() {
   };
 
   return (
-    <div className="space-y-6 max-w-xl mx-auto h-[70vh] flex flex-col pt-10">
+    <div className="space-y-6 max-w-xl mx-auto flex flex-col pt-8 pb-4">
       <div className="text-center space-y-2 mb-8 shrink-0">
-        <h2 className="text-3xl font-display font-bold text-violet-700 tracking-tight flex items-center justify-center gap-3">
-          <Layers className="w-8 h-8 fill-violet-100" />
+        <h2 className="text-3xl font-display font-bold text-neutral-700 tracking-tight flex items-center justify-center gap-3">
+          <Layers className="w-8 h-8 fill-neutral-100" />
           Bộ Thẻ Khám Phá
         </h2>
         <p className="text-neutral-500">Kéo gần khoảng cách qua những câu hỏi sâu sắc khi hẹn hò.</p>
       </div>
 
-      <div className="flex-1 relative w-full flex items-center justify-center perspective-[1000px]">
+      <div className="relative w-full h-[400px] flex items-center justify-center" style={{ perspective: "1000px" }}>
         <motion.div 
           animate={{ rotateX: isFlipped ? 180 : 0 }}
           transition={{ type: "spring", stiffness: 200, damping: 20 }}
@@ -84,7 +84,7 @@ export default function DiscoveryDeck() {
         >
           {/* Mặt trước */}
           <div 
-            className="absolute inset-0 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-[2.5rem] shadow-2xl p-8 flex flex-col items-center justify-center border-4 border-white/20 backface-hidden"
+            className="absolute inset-0 bg-neo-bg rounded-3xl shadow-2xl p-8 flex flex-col items-center justify-center border-4 border-white/20 backface-hidden"
             style={{ backfaceVisibility: "hidden" }}
           >
             <Layers className="w-16 h-16 text-white/50 mb-6 drop-shadow-md" />
@@ -95,7 +95,7 @@ export default function DiscoveryDeck() {
 
           {/* Mặt sau */}
           <div 
-            className="absolute inset-0 bg-white rounded-[2.5rem] shadow-2xl p-10 flex flex-col items-center justify-center text-center border overflow-y-auto"
+            className="absolute inset-0 bg-white rounded-3xl shadow-2xl p-10 flex flex-col items-center justify-center text-center border overflow-y-auto"
             style={{ backfaceVisibility: "hidden", transform: "rotateX(180deg)" }}
           >
             <p className="text-2xl font-bold font-display text-neutral-800 leading-snug">
@@ -108,7 +108,7 @@ export default function DiscoveryDeck() {
       <div className="shrink-0 flex justify-center pb-8 mt-6">
          <button 
            onClick={handleNext}
-           className="flex items-center gap-2 bg-neutral-100 px-6 py-3 rounded-full font-bold text-neutral-600 hover:bg-neutral-200 transition-colors shadow-sm"
+           className="flex items-center gap-2 bg-neutral-100 px-6 py-3 rounded-3xl font-bold text-neutral-600 hover:bg-neutral-200 transition-colors shadow-sm"
          >
            <RefreshCw className="w-5 h-5" /> Đổi câu hỏi khác
          </button>

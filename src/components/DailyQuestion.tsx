@@ -5,6 +5,8 @@ import { collection, query, where, getDocs, doc, setDoc, onSnapshot, serverTimes
 import { db } from '../lib/firebase';
 import { format } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { GoogleGenAI } from "@google/genai";
+import { Loader2 } from 'lucide-react';
 
 export default function DailyQuestion({ user }: { user: any }) {
   const [partner, setPartner] = useState<any>(null);
@@ -14,6 +16,33 @@ export default function DailyQuestion({ user }: { user: any }) {
   const [answer, setAnswer] = useState('');
   const [customQuestion, setCustomQuestion] = useState('');
   const [setupMode, setSetupMode] = useState(false);
+  const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+
+  const handleAISuggestion = async () => {
+    setIsAiSuggesting(true);
+    try {
+      const { generateContent } = await import('../lib/gemini');
+      const prompt = `Bạn là hệ thống tâm lý học tình yêu tiên tiến (đóng vai Gemma 4). Hãy phân tích các góc độ cảm xúc sâu sắc và đưa ra 1 câu hỏi thật sáng tạo, khơi gợi chia sẻ sâu sắc hoặc siêu hài hước để cặp đôi hỏi nhau hôm nay. Tránh các câu hỏi quá phổ thông. Chỉ trả về nội dung câu hỏi, không cần giải thích hay nháy kép. Ví dụ: "Nếu chúng ta đổi vai trò cho nhau trong 1 ngày, điều đầu tiên em/anh sẽ làm để trêu chọc đối phương là gì?"`;
+      const response = await generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+      });
+      if (response.text) {
+        setCustomQuestion(response.text.replace(/^["']|["']$/g, '').trim());
+      }
+    } catch (error: any) {
+      console.error(error);
+      let errMsg = error instanceof Error ? error.message : "Hãy thử lại";
+      if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid") || errMsg.includes("API key") || errMsg.includes("Khóa API") || errMsg.includes("API_KEY")) {
+         errMsg = "Khóa API không hợp lệ. Vui lòng vào Cài đặt (Settings) -> Secrets để nhập hoặc đổi khóa GEMINI_API_KEY. Sau đó Tải lại trang (F5).";
+      } else if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+         errMsg = "Hệ thống đang quá tải hoặc hết hạn mức. Vui lòng thêm/đổi khóa GEMINI_API_KEY trong Settings -> Secrets.";
+      }
+      alert(`Lỗi khi gọi AI gợi ý: ${errMsg}`);
+    } finally {
+      setIsAiSuggesting(false);
+    }
+  };
 
   const fetchPartner = async () => {
     if (!user) return;
@@ -116,8 +145,8 @@ export default function DailyQuestion({ user }: { user: any }) {
   return (
     <div className="space-y-6 max-w-2xl mx-auto pb-safe">
       <div className="text-center space-y-2 mb-8">
-        <h2 className="text-3xl font-display font-bold text-rose-600 tracking-tight flex items-center justify-center gap-3">
-          <Heart className="w-8 h-8 fill-rose-100" />
+        <h2 className="text-3xl font-display font-bold text-orange-600 tracking-tight flex items-center justify-center gap-3">
+          <Heart className="w-8 h-8 fill-orange-100" />
           Câu Hỏi Hôm Nay
         </h2>
         <p className="text-neutral-500">Người yêu ơi, trả lời câu hỏi này nhé!</p>
@@ -126,12 +155,12 @@ export default function DailyQuestion({ user }: { user: any }) {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-rose-500/5 relative overflow-hidden border border-rose-100"
+        className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-orange-500/5 relative overflow-hidden border border-orange-100"
       >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-rose-100 to-transparent rounded-bl-full opacity-50" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-neo-bg rounded-full opacity-50" />
         
         <div className="relative z-10 text-center space-y-6">
-          <Sparkles className="w-10 h-10 text-rose-400 mx-auto" />
+          <Sparkles className="w-10 h-10 text-orange-400 mx-auto" />
 
           {!hasQuestion ? (
              <div className="space-y-4">
@@ -142,17 +171,22 @@ export default function DailyQuestion({ user }: { user: any }) {
                       value={customQuestion}
                       onChange={(e) => setCustomQuestion(e.target.value)}
                       placeholder="Nhập câu hỏi bạn muốn hỏi người ấy..."
-                      className="w-full h-32 bg-rose-50/50 border border-rose-100 rounded-2xl p-4 focus:ring-2 focus:ring-rose-200 transition-all font-medium text-neutral-800 resize-none outline-none"
+                      className="w-full h-32 bg-orange-50/50 border border-orange-100 rounded-3xl p-4 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800 resize-none outline-none"
                     />
                     <div className="flex gap-2">
-                      <button onClick={() => setSetupMode(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 font-bold rounded-xl">Hủy</button>
-                      <button onClick={handleSetQuestion} disabled={!customQuestion.trim()} className="flex-[2] bg-rose-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-rose-700 disabled:opacity-50">Lưu câu hỏi</button>
+                       <button onClick={handleAISuggestion} disabled={isAiSuggesting} className="flex-1 py-3 bg-neutral-50 text-neutral-600 hover:bg-neutral-100 font-bold rounded-3xl flex justify-center items-center gap-2 transition-colors border border-neutral-100">
+                           {isAiSuggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5"/>} Gợi ý bằng AI
+                       </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setSetupMode(false)} className="flex-1 py-3 bg-neutral-100 text-neutral-600 font-bold rounded-3xl">Hủy</button>
+                      <button onClick={handleSetQuestion} disabled={!customQuestion.trim()} className="flex-[2] bg-orange-600 text-white font-bold py-3 rounded-3xl shadow-md hover:bg-orange-700 disabled:opacity-50">Lưu câu hỏi</button>
                     </div>
                   </div>
                 ) : (
                   <button 
                     onClick={() => setSetupMode(true)}
-                    className="w-full py-4 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-2xl border border-rose-200 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-orange-50 hover:bg-orange-100 text-orange-600 font-bold rounded-3xl border border-orange-200 transition-all flex items-center justify-center gap-2"
                   >
                     <PenTool className="w-5 h-5"/> Tự đặt câu hỏi cho hôm nay
                   </button>
@@ -163,7 +197,7 @@ export default function DailyQuestion({ user }: { user: any }) {
               <h3 className="text-2xl font-bold text-neutral-900 leading-snug">
                 "{questionData.question}"
               </h3>
-              <p className="text-xs text-rose-500 font-semibold italic">Được đặt bởi {questionData.authorId === user.uid ? 'bạn' : 'người ấy'}</p>
+              <p className="text-xs text-orange-500 font-semibold italic">Được đặt bởi {questionData.authorId === user.uid ? 'bạn' : 'người ấy'}</p>
 
               {!myAnswer ? (
                 <div className="space-y-4 pt-4">
@@ -171,34 +205,34 @@ export default function DailyQuestion({ user }: { user: any }) {
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     placeholder="Câu trả lời của bạn..."
-                    className="w-full h-32 bg-rose-50/50 border border-rose-100 rounded-2xl p-4 focus:ring-2 focus:ring-rose-200 transition-all font-medium text-neutral-800 resize-none outline-none"
+                    className="w-full h-32 bg-orange-50/50 border border-orange-100 rounded-3xl p-4 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800 resize-none outline-none"
                   />
                   <button 
                     onClick={handleAnswer}
                     disabled={!answer.trim()}
-                    className="w-full bg-rose-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-rose-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full bg-orange-600 text-white font-bold py-4 rounded-3xl shadow-md hover:bg-orange-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Send className="w-5 h-5" /> Gửi câu trả lời để mở khóa
                   </button>
                 </div>
               ) : (
                 <div className="space-y-6 pt-4 text-left">
-                  <div className="p-6 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
-                    <span className="text-xs font-bold text-rose-500 uppercase tracking-widest pl-1">Bạn</span>
+                  <div className="p-6 bg-orange-50 rounded-3xl space-y-2 border border-orange-100">
+                    <span className="text-xs font-bold text-orange-500 uppercase tracking-widest pl-1">Bạn</span>
                     <p className="text-neutral-800 font-medium">{myAnswer}</p>
                   </div>
 
-                  <div className="p-6 bg-indigo-50 rounded-2xl space-y-2 border border-indigo-100 relative">
-                    <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest pl-1">Người ấy</span>
+                  <div className="p-6 bg-neutral-50 rounded-3xl space-y-2 border border-neutral-100 relative">
+                    <span className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Người ấy</span>
                     {!partnerAnswer ? (
-                       <div className="flex flex-col items-center justify-center py-4 text-indigo-400">
+                       <div className="flex flex-col items-center justify-center py-4 text-neutral-400">
                           <Lock className="w-6 h-6 mb-2" />
                           <p className="font-medium">Chờ người ấy trả lời nhé...</p>
                        </div>
                     ) : (
                        <>
                          <p className="text-neutral-800 font-medium italic">"{partnerAnswer}"</p>
-                         <div className="absolute top-4 right-4 bg-indigo-100 p-2 rounded-full text-indigo-600">
+                         <div className="absolute top-4 right-4 bg-neutral-100 p-2 rounded-3xl text-neutral-600">
                            <Unlock className="w-4 h-4" />
                          </div>
                        </>
