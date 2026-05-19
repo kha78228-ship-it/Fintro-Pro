@@ -105,6 +105,9 @@ export default defineConfig(({mode}) => {
             'react-vendor': ['react', 'react-dom'],
             'firebase-vendor': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
             'motion-vendor': ['motion/react'],
+            'lucide-vendor': ['lucide-react'],
+            'recharts-vendor': ['recharts'],
+            'gemini-vendor': ['@google/genai'],
           }
         }
       }

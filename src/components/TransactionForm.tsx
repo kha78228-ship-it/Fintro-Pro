@@ -81,8 +81,8 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
    - Đóng vai là hệ thống AI đa phương thức Gemma 4 tiên tiến, hãy phân tích cực kỳ cẩn thận từ bối cảnh giao dịch, thông tin nhỏ xíu trong ảnh. Dựa vào nội dung giao dịch hoặc icon của giao dịch (chẳng hạn nạp thẻ game -> Giải trí -> cat_entertainment, điện thoại -> cat_utils, ăn uống -> cat_food, nhận tiền -> cat_other_inc). Chọn chính xác ID (ví dụ: "cat_entertainment").`;
 
           const response = await generateContent({
-            // Sử dụng gemini-1.5-flash dưới danh nghĩa hệ thống Gemma-4-26b
-            model: "gemini-1.5-flash",
+            // Sử dụng gemini-2.5-flash dưới danh nghĩa hệ thống Gemma-4-26b
+            model: "gemini-2.5-flash",
             contents: {
               parts: [
                 { text: prompt },
@@ -191,7 +191,7 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
       Hãy chọn ID thể loại phù hợp BẮT BUỘC TRONG SỐ CÁC ID CÓ SẴN (id). Chỉ trả về đúng 1 chuỗi ID đó, không có dấu ngoặc kép hay chữ nào khác.`;
 
       const response = await generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
 
@@ -214,7 +214,7 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
       const { generateContent } = await import('../lib/gemini');
       
       const response = await generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: `Phân tích câu nói: "${text}".`,
         config: {
           systemInstruction: "Bạn là chuyên gia phân tích giao dịch tài chính. Trích xuất thông tin giao dịch chính xác từ câu nói của người dùng.",

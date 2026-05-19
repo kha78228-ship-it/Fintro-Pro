@@ -330,6 +330,9 @@ export default function SettingsView({
          <button onClick={() => setActiveTab('data')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'data' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
            <Download className="w-4 h-4" /> Dữ liệu & Ngoại tuyến
          </button>
+         <button onClick={() => setActiveTab('system')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'system' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
+           <Bell className="w-4 h-4" /> Hệ thống
+         </button>
       </div>
 
       <AnimatePresence mode="wait">
@@ -465,173 +468,6 @@ export default function SettingsView({
                         );
                      })}
                      {inviteCodes.length === 0 && <p className="text-sm text-neutral-500 col-span-full">Chưa có mã mời nào.</p>}
-                  </div>
-               </div>
-            )}
-
-            {isAdmin && (
-               <div className="card p-8 space-y-6 max-w-2xl mt-8">
-                  <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
-                     <div className="flex items-center gap-3">
-                        <Bell className="w-5 h-5 text-neutral-500" />
-                        <h3 className="text-lg font-bold text-neutral-900">Thông báo hệ thống (Toàn bộ người dùng)</h3>
-                     </div>
-                     <div>
-                       {isAnnounceActive ? (
-                         <button onClick={() => handleToggleAnnouncement(false)} className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tắt Thông Báo</button>
-                       ) : (
-                         <span className="text-sm border border-neutral-200 bg-neutral-50 text-neutral-500 font-semibold px-4 py-2 rounded-3xl">Đang ẩn</span>
-                       )}
-                     </div>
-                  </div>
-                  <div className="space-y-4">
-                     <div>
-                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Nội dung thông báo</label>
-                        <textarea value={sysAnnounceText} onChange={e => setSysAnnounceText(e.target.value)} rows={3} placeholder="Ví dụ: App bảo trì lúc..." className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
-                     </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Loại hiển thị</label>
-                           <select value={sysAnnounceIsMarquee ? 'marquee' : 'popup'} onChange={e => setSysAnnounceIsMarquee(e.target.value === 'marquee')} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm">
-                             <option value="marquee">Chữ chạy (Marquee)</option>
-                             <option value="popup">Bảng hiện ra (Popup)</option>
-                           </select>
-                        </div>
-                        <div>
-                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Kích thước chữ (px)</label>
-                           <input type="number" value={sysAnnounceSize} onChange={e => setSysAnnounceSize(Number(e.target.value))} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-3 gap-4">
-                        <div>
-                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Màu chữ</label>
-                           <input type="color" value={sysAnnounceColor} onChange={e => setSysAnnounceColor(e.target.value)} className="w-full h-10 border border-neutral-200 rounded-3xl cursor-pointer" />
-                        </div>
-                        <div>
-                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Màu nền</label>
-                           <input type="color" value={sysAnnounceBg} onChange={e => setSysAnnounceBg(e.target.value)} className="w-full h-10 border border-neutral-200 rounded-3xl cursor-pointer" />
-                        </div>
-                        <div>
-                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Font chữ</label>
-                           <select value={sysAnnounceFont} onChange={e => setSysAnnounceFont(e.target.value)} className="w-full h-10 bg-neutral-50 border border-neutral-200 rounded-3xl px-2 text-sm">
-                              {FONTS.map(f => (
-                                 <option key={f.id} value={f.id}>{f.label}</option>
-                              ))}
-                           </select>
-                        </div>
-                     </div>
-                     <div className="pt-4">
-                        <button onClick={handlePublishAnnouncement} className="w-full bg-neutral-600 hover:bg-neutral-700 text-white font-bold py-3 rounded-3xl transition-colors shadow-sm">
-                           Phát Thông Báo / Cập Nhật
-                        </button>
-                     </div>
-                  </div>
-               </div>
-            )}
-
-             {isAdmin && (
-               <div className="card p-8 space-y-6 max-w-2xl mt-8">
-                  <div className="flex justify-between items-center mb-6 border-b border-orange-100 pb-4">
-                     <div className="flex items-center gap-3">
-                        <UserCircle className="w-5 h-5 text-orange-500" />
-                        <h3 className="text-lg font-bold text-neutral-900">Người dùng hệ thống</h3>
-                     </div>
-                  </div>
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                      {allUsers.map(u => (
-                          <div key={u.id} className="bg-white border border-neutral-200 rounded-3xl p-4 flex items-center justify-between">
-                             <div>
-                                 <div className="font-bold text-neutral-900">{u.displayName || 'Khách'} <span className="text-xs text-neutral-400 font-mono">({u.friendCode || 'Chưa đồng bộ'})</span></div>
-                                 <div className="text-sm text-neutral-500">{u.email}</div>
-                             </div>
-                             <button onClick={() => deleteUserAccount(u.id, u.displayName || u.email)} className="text-xs font-semibold text-orange-500 hover:text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-2 rounded-3xl transition-colors">
-                                 Xoá
-                             </button>
-                          </div>
-                      ))}
-                      {allUsers.length === 0 && <p className="text-sm text-neutral-500">Chưa có dữ liệu người dùng.</p>}
-                  </div>
-               </div>
-            )}
-
-            {isSuperAdmin && (
-               <div className="card p-8 space-y-6 max-w-2xl mt-8 bg-neutral-50/30 border border-neutral-100">
-                  <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
-                     <div className="flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-neutral-600" />
-                        <h3 className="text-lg font-bold text-neutral-900">Quản trị viên ủy quyền (Phụ)</h3>
-                     </div>
-                  </div>
-                  
-                  <div className="flex flex-col md:flex-row gap-3 mb-6">
-                    <select 
-                      value={newAdminUserId}
-                      onChange={e => setNewAdminUserId(e.target.value)}
-                      className="input-field flex-1 text-sm font-medium"
-                    >
-                      <option value="">-- Chọn tài khoản cấp quyền --</option>
-                      {allUsers.filter(u => u.id !== user?.uid).map(u => (
-                         <option key={u.id} value={u.id}>
-                            {u.displayName || 'Không tên'} - {u.email || u.id}
-                         </option>
-                      ))}
-                    </select>
-                    <select 
-                      value={adminDurationHours}
-                      onChange={e => setAdminDurationHours(Number(e.target.value))}
-                      className="input-field w-32"
-                    >
-                      <option value={1}>1 giờ</option>
-                      <option value={24}>1 ngày</option>
-                      <option value={72}>3 ngày</option>
-                      <option value={168}>7 ngày</option>
-                    </select>
-                    <button 
-                      onClick={handleAddAdmin}
-                      disabled={!newAdminUserId}
-                      className="bg-neutral-600 hover:bg-neutral-700 text-white font-bold px-6 py-2.5 rounded-3xl disabled:opacity-50 transition-all shadow-md active:scale-95 whitespace-nowrap"
-                    >
-                      Cấp Quyền
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-bold text-neutral-700">Danh sách quản trị viên:</h4>
-                    {adminList.map(adm => {
-                       const exp = new Date(adm.expiresAt);
-                       const isExpired = Date.now() > adm.expiresAt;
-                       const usrInfo = allUsers.find(u => u.id === adm.id);
-                       
-                       return (
-                         <div key={adm.id} className={`p-4 rounded-3xl border ${isExpired ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-neutral-200 shadow-sm'} flex items-center justify-between`}>
-                            <div className="flex items-center gap-3">
-                               <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center shrink-0">
-                                  <Shield className="w-5 h-5 text-neutral-500" />
-                               </div>
-                               <div>
-                                  <div className="font-bold text-neutral-900 mb-0.5">{usrInfo ? usrInfo.displayName : adm.id}</div>
-                                  {usrInfo && usrInfo.email && <div className="text-xs text-neutral-500 mb-1">{usrInfo.email}</div>}
-                                  <div className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded inline-block ${isExpired ? 'text-orange-600 bg-orange-50' : 'text-neutral-600 bg-neutral-50'}`}>
-                                     {isExpired ? 'Đã hết hạn' : `Tới: ${exp.toLocaleString()}`}
-                                  </div>
-                               </div>
-                            </div>
-                            <button 
-                              onClick={() => handleRemoveAdmin(adm.id)}
-                              className="p-2.5 text-orange-500 hover:bg-orange-50 hover:text-orange-600 rounded-3xl transition-all shadow-sm border border-transparent hover:border-orange-100"
-                              title="Gỡ quyền"
-                            >
-                               <Trash2 className="w-5 h-5" />
-                            </button>
-                         </div>
-                       );
-                    })}
-                    {adminList.length === 0 && (
-                        <div className="text-center py-6 bg-neutral-50 rounded-3xl border border-neutral-100 border-dashed">
-                           <Shield className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
-                           <p className="text-sm font-medium text-neutral-500">Chưa có quản trị viên phụ nào.</p>
-                        </div>
-                    )}
                   </div>
                </div>
             )}
@@ -892,6 +728,184 @@ export default function SettingsView({
                  )}
                </div>
             </div>
+         </motion.div>
+      )}
+      {activeTab === 'system' && (
+         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            {!isAdmin ? (
+               <div className="card p-8 text-center text-neutral-500">
+                  Phần này chỉ dành cho quản trị viên hệ thống.
+               </div>
+            ) : (
+               <>
+            {isAdmin && (
+               <div className="card p-8 space-y-6 max-w-2xl mt-8">
+                  <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
+                     <div className="flex items-center gap-3">
+                        <Bell className="w-5 h-5 text-neutral-500" />
+                        <h3 className="text-lg font-bold text-neutral-900">Thông báo hệ thống (Toàn bộ người dùng)</h3>
+                     </div>
+                     <div>
+                       {isAnnounceActive ? (
+                         <button onClick={() => handleToggleAnnouncement(false)} className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tắt Thông Báo</button>
+                       ) : (
+                         <span className="text-sm border border-neutral-200 bg-neutral-50 text-neutral-500 font-semibold px-4 py-2 rounded-3xl">Đang ẩn</span>
+                       )}
+                     </div>
+                  </div>
+                  <div className="space-y-4">
+                     <div>
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Nội dung thông báo</label>
+                        <textarea value={sysAnnounceText} onChange={e => setSysAnnounceText(e.target.value)} rows={3} placeholder="Ví dụ: App bảo trì lúc..." className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Loại hiển thị</label>
+                           <select value={sysAnnounceIsMarquee ? 'marquee' : 'popup'} onChange={e => setSysAnnounceIsMarquee(e.target.value === 'marquee')} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm">
+                             <option value="marquee">Chữ chạy (Marquee)</option>
+                             <option value="popup">Bảng hiện ra (Popup)</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Kích thước chữ (px)</label>
+                           <input type="number" value={sysAnnounceSize} onChange={e => setSysAnnounceSize(Number(e.target.value))} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-3 gap-4">
+                        <div>
+                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Màu chữ</label>
+                           <input type="color" value={sysAnnounceColor} onChange={e => setSysAnnounceColor(e.target.value)} className="w-full h-10 border border-neutral-200 rounded-3xl cursor-pointer" />
+                        </div>
+                        <div>
+                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Màu nền</label>
+                           <input type="color" value={sysAnnounceBg} onChange={e => setSysAnnounceBg(e.target.value)} className="w-full h-10 border border-neutral-200 rounded-3xl cursor-pointer" />
+                        </div>
+                        <div>
+                           <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Font chữ</label>
+                           <select value={sysAnnounceFont} onChange={e => setSysAnnounceFont(e.target.value)} className="w-full h-10 bg-neutral-50 border border-neutral-200 rounded-3xl px-2 text-sm">
+                              {FONTS.map(f => (
+                                 <option key={f.id} value={f.id}>{f.label}</option>
+                              ))}
+                           </select>
+                        </div>
+                     </div>
+                     <div className="pt-4">
+                        <button onClick={handlePublishAnnouncement} className="w-full bg-neutral-600 hover:bg-neutral-700 text-white font-bold py-3 rounded-3xl transition-colors shadow-sm">
+                           Phát Thông Báo / Cập Nhật
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            )}
+
+             {isAdmin && (
+               <div className="card p-8 space-y-6 max-w-2xl mt-8">
+                  <div className="flex justify-between items-center mb-6 border-b border-orange-100 pb-4">
+                     <div className="flex items-center gap-3">
+                        <UserCircle className="w-5 h-5 text-orange-500" />
+                        <h3 className="text-lg font-bold text-neutral-900">Người dùng hệ thống</h3>
+                     </div>
+                  </div>
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                      {allUsers.map(u => (
+                          <div key={u.id} className="bg-white border border-neutral-200 rounded-3xl p-4 flex items-center justify-between">
+                             <div>
+                                 <div className="font-bold text-neutral-900">{u.displayName || 'Khách'} <span className="text-xs text-neutral-400 font-mono">({u.friendCode || 'Chưa đồng bộ'})</span></div>
+                                 <div className="text-sm text-neutral-500">{u.email}</div>
+                             </div>
+                             <button onClick={() => deleteUserAccount(u.id, u.displayName || u.email)} className="text-xs font-semibold text-orange-500 hover:text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-2 rounded-3xl transition-colors">
+                                 Xoá
+                             </button>
+                          </div>
+                      ))}
+                      {allUsers.length === 0 && <p className="text-sm text-neutral-500">Chưa có dữ liệu người dùng.</p>}
+                  </div>
+               </div>
+            )}
+
+            {isSuperAdmin && (
+               <div className="card p-8 space-y-6 max-w-2xl mt-8 bg-neutral-50/30 border border-neutral-100">
+                  <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
+                     <div className="flex items-center gap-3">
+                        <Shield className="w-5 h-5 text-neutral-600" />
+                        <h3 className="text-lg font-bold text-neutral-900">Quản trị viên ủy quyền (Phụ)</h3>
+                     </div>
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row gap-3 mb-6">
+                    <select 
+                      value={newAdminUserId}
+                      onChange={e => setNewAdminUserId(e.target.value)}
+                      className="input-field flex-1 text-sm font-medium"
+                    >
+                      <option value="">-- Chọn tài khoản cấp quyền --</option>
+                      {allUsers.filter(u => u.id !== user?.uid).map(u => (
+                         <option key={u.id} value={u.id}>
+                            {u.displayName || 'Không tên'} - {u.email || u.id}
+                         </option>
+                      ))}
+                    </select>
+                    <select 
+                      value={adminDurationHours}
+                      onChange={e => setAdminDurationHours(Number(e.target.value))}
+                      className="input-field w-32"
+                    >
+                      <option value={1}>1 giờ</option>
+                      <option value={24}>1 ngày</option>
+                      <option value={72}>3 ngày</option>
+                      <option value={168}>7 ngày</option>
+                    </select>
+                    <button 
+                      onClick={handleAddAdmin}
+                      disabled={!newAdminUserId}
+                      className="bg-neutral-600 hover:bg-neutral-700 text-white font-bold px-6 py-2.5 rounded-3xl disabled:opacity-50 transition-all shadow-md active:scale-95 whitespace-nowrap"
+                    >
+                      Cấp Quyền
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-bold text-neutral-700">Danh sách quản trị viên:</h4>
+                    {adminList.map(adm => {
+                       const exp = new Date(adm.expiresAt);
+                       const isExpired = Date.now() > adm.expiresAt;
+                       const usrInfo = allUsers.find(u => u.id === adm.id);
+                       
+                       return (
+                         <div key={adm.id} className={`p-4 rounded-3xl border ${isExpired ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-neutral-200 shadow-sm'} flex items-center justify-between`}>
+                            <div className="flex items-center gap-3">
+                               <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center shrink-0">
+                                  <Shield className="w-5 h-5 text-neutral-500" />
+                               </div>
+                               <div>
+                                  <div className="font-bold text-neutral-900 mb-0.5">{usrInfo ? usrInfo.displayName : adm.id}</div>
+                                  {usrInfo && usrInfo.email && <div className="text-xs text-neutral-500 mb-1">{usrInfo.email}</div>}
+                                  <div className={`text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded inline-block ${isExpired ? 'text-orange-600 bg-orange-50' : 'text-neutral-600 bg-neutral-50'}`}>
+                                     {isExpired ? 'Đã hết hạn' : `Tới: ${exp.toLocaleString()}`}
+                                  </div>
+                               </div>
+                            </div>
+                            <button 
+                              onClick={() => handleRemoveAdmin(adm.id)}
+                              className="p-2.5 text-orange-500 hover:bg-orange-50 hover:text-orange-600 rounded-3xl transition-all shadow-sm border border-transparent hover:border-orange-100"
+                              title="Gỡ quyền"
+                            >
+                               <Trash2 className="w-5 h-5" />
+                            </button>
+                         </div>
+                       );
+                    })}
+                    {adminList.length === 0 && (
+                        <div className="text-center py-6 bg-neutral-50 rounded-3xl border border-neutral-100 border-dashed">
+                           <Shield className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                           <p className="text-sm font-medium text-neutral-500">Chưa có quản trị viên phụ nào.</p>
+                        </div>
+                    )}
+                  </div>
+               </div>
+            )}
+               </>
+            )}
          </motion.div>
       )}
       </AnimatePresence>

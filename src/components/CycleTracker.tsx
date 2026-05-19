@@ -17,6 +17,8 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
   const [cycleLength, setCycleLength] = useState<number>(28);
   const [periodLength, setPeriodLength] = useState<number>(5);
   const [shareWithFamily, setShareWithFamily] = useState<boolean>(true);
+  const [periodReminderDays, setPeriodReminderDays] = useState<number>(2);
+  const [ovulationReminderDays, setOvulationReminderDays] = useState<number>(2);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
           if (localData.cycleLength) setCycleLength(localData.cycleLength);
           if (localData.periodLength) setPeriodLength(localData.periodLength);
           if (localData.shareWithFamily !== undefined) setShareWithFamily(localData.shareWithFamily);
+          if (localData.periodReminderDays !== undefined) setPeriodReminderDays(localData.periodReminderDays);
+          if (localData.ovulationReminderDays !== undefined) setOvulationReminderDays(localData.ovulationReminderDays);
         } catch(e) {}
       }
 
@@ -47,6 +51,8 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
               if (myData.cycleLength) setCycleLength(myData.cycleLength);
               if (myData.periodLength) setPeriodLength(myData.periodLength);
               if (myData.shareWithFamily !== undefined) setShareWithFamily(myData.shareWithFamily);
+              if (myData.periodReminderDays !== undefined) setPeriodReminderDays(myData.periodReminderDays);
+              if (myData.ovulationReminderDays !== undefined) setOvulationReminderDays(myData.ovulationReminderDays);
             }
           }
         } catch (error) {
@@ -63,7 +69,9 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
       lastPeriod,
       cycleLength,
       periodLength,
-      shareWithFamily
+      shareWithFamily,
+      periodReminderDays,
+      ovulationReminderDays
     };
     localStorage.setItem('__fintrack_cycle', JSON.stringify(data));
     
@@ -227,6 +235,29 @@ export default function CycleTracker({ user }: CycleTrackerProps) {
                 min={1}
                 max={15}
                 onChange={(e) => setPeriodLength(parseInt(e.target.value) || 0)}
+                className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Nhắc rụng dâu trước (ngày)</label>
+              <input 
+                type="number"
+                value={periodReminderDays}
+                min={0}
+                max={7}
+                onChange={(e) => setPeriodReminderDays(parseInt(e.target.value) || 0)}
+                className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest pl-1">Nhắc rụng trứng trước (ngày)</label>
+              <input 
+                type="number"
+                value={ovulationReminderDays}
+                min={0}
+                max={7}
+                onChange={(e) => setOvulationReminderDays(parseInt(e.target.value) || 0)}
                 className="w-full bg-orange-50 border-none rounded-3xl p-3 focus:ring-2 focus:ring-orange-200 transition-all font-medium text-neutral-800"
               />
             </div>

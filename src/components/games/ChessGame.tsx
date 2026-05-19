@@ -84,7 +84,7 @@ export default function ChessGame({ user, onExit }: ChessGameProps) {
       const prompt = `Bạn là hệ thống Gemma 4 Coach - Vua Cờ Vua ảo. Hãy phân tích sâu tình thế hiện tại dựa trên mã FEN: ${game.fen()} . Lượt tiếp theo là của ${game.turn() === 'w' ? 'Trắng' : 'Đen'}. Hãy đưa ra đánh giá chiến thuật cực chuẩn: lợi thế đang nghiêng về ai? Nên tập trung phòng thủ nhánh nào hay tấn công vào đâu? (Trả về phân tích ngắn gọn, súc tích nhưng sắc bén, hướng dẫn như một đại kiện tướng).`;
       
       const response = await generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
 

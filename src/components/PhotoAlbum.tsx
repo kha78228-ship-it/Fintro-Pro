@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, Image as ImageIcon, Trash2, Plus, X, Heart, Maximize2, Download } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, Plus, X, Heart, Maximize2, Download, User } from 'lucide-react';
 import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 interface Photo {
@@ -11,6 +12,8 @@ interface Photo {
   description: string;
   createdAt: any;
   createdBy: string;
+  creatorName?: string;
+  creatorAvatar?: string;
 }
 
 export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
@@ -49,13 +52,20 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
         const file = files[i];
         
         // Compress image before uploading
-        const compressedBase64 = await compressImage(file);
+        const blob = await compressImage(file);
+        
+        // Upload to Firebase Storage
+        const fileRef = ref(storage, `photos/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
+        await uploadBytes(fileRef, blob!);
+        const downloadUrl = await getDownloadURL(fileRef);
         
         await addDoc(collection(db, 'photos'), {
-          url: compressedBase64,
+          url: downloadUrl,
           description: '',
           createdAt: serverTimestamp(),
-          createdBy: auth.currentUser.uid
+          createdBy: auth.currentUser.uid,
+          creatorName: auth.currentUser.displayName || 'Khách',
+          creatorAvatar: auth.currentUser.photoURL || ''
         });
       }
     } catch (error) {
@@ -67,7 +77,7 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
     }
   };
 
-  const compressImage = (file: File): Promise<string> => {
+  const compressImage = (file: File): Promise<Blob | null> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -76,8 +86,8 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
           let width = img.width;
           let height = img.height;
 
@@ -98,9 +108,9 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Output base64 with moderate quality to keep under ~300kb
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-          resolve(dataUrl);
+          canvas.toBlob((blob) => {
+            resolve(blob);
+          }, 'image/jpeg', 0.8);
         };
         img.onerror = (err) => reject(err);
       };
@@ -189,13 +199,24 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
                 alt="Shared memory" 
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
               />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <button 
                 onClick={(e) => { e.stopPropagation(); handleDelete(photo.id); }}
                 className="absolute top-2 right-2 p-2 bg-white/80 backdrop-blur-sm text-neutral-600 rounded-full opacity-0 group-hover:opacity-100 hover:bg-orange-100 hover:text-orange-600 transition-all active:scale-90"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+              
+              <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {photo.creatorAvatar ? (
+                  <img src={photo.creatorAvatar} className="w-6 h-6 rounded-full border border-white/50 shadow-sm shrink-0" alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-neutral-200 border border-white/50 flex items-center justify-center shrink-0">
+                    <User className="w-3 h-3 text-neutral-500" />
+                  </div>
+                )}
+                <span className="text-white text-xs font-medium drop-shadow-md truncate">{photo.creatorName || 'Khách'}</span>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>
@@ -218,7 +239,7 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
                <X className="w-6 h-6" />
              </button>
              
-             <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 flex gap-3">
+             <div className="absolute bottom-4 sm:bottom-8 right-4 sm:right-8 flex gap-3 z-10">
                <button 
                  onClick={(e) => { e.stopPropagation(); handleDownload(selectedPhoto); }}
                  className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors active:scale-90"
@@ -233,6 +254,22 @@ export function PhotoAlbum({ appTheme = 'vintage' }: { appTheme?: string }) {
                >
                  <Trash2 className="w-5 h-5" />
                </button>
+             </div>
+
+             <div className="absolute bottom-4 sm:bottom-8 left-4 sm:left-8 flex items-center gap-3 z-10">
+               {selectedPhoto.creatorAvatar ? (
+                 <img src={selectedPhoto.creatorAvatar} className="w-10 h-10 rounded-full border-2 border-white/50 shadow-lg" alt="" referrerPolicy="no-referrer" />
+               ) : (
+                 <div className="w-10 h-10 rounded-full bg-neutral-800 border-2 border-white/50 shadow-lg flex items-center justify-center">
+                   <User className="w-5 h-5 text-neutral-300" />
+                 </div>
+               )}
+               <div className="text-left">
+                 <p className="text-white font-medium text-sm drop-shadow-md">{selectedPhoto.creatorName || 'Khách'}</p>
+                 {selectedPhoto.createdAt?.toDate && (
+                   <p className="text-white/60 text-xs drop-shadow-md">{selectedPhoto.createdAt.toDate().toLocaleDateString('vi-VN')}</p>
+                 )}
+               </div>
              </div>
 
              <motion.img 

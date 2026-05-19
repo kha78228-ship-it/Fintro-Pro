@@ -1,6 +1,6 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Gamepad2, Swords, Ghost, Diamond, Crown, ChevronLeft, Users, Zap, Clock, Play } from 'lucide-react';
+import { Gamepad2, Swords, Ghost, Diamond, Crown, ChevronLeft, Users, Zap, Clock, Play, Loader2 } from 'lucide-react';
 
 const ChessGame = lazy(() => import('./games/ChessGame'));
 const LudoGame = lazy(() => import('./games/LudoGame'));

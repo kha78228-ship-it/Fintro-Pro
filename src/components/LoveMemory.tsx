@@ -1,25 +1,65 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Heart, Clock, Calendar } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Heart, Clock, Calendar, BookHeart, Plus, X, Trash2 } from 'lucide-react';
 import { differenceInDays, differenceInMonths, differenceInYears } from 'date-fns';
+import { collection, query, where, getDocs, setDoc, doc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { User } from 'firebase/auth';
 
-export default function LoveMemory() {
+interface LoveMemoryProps {
+  user?: User | null;
+}
+
+export default function LoveMemory({ user }: LoveMemoryProps) {
   const [loveDate, setLoveDate] = useState(() => localStorage.getItem('__love_date') || '2023-01-01');
   const [marriageDate, setMarriageDate] = useState(() => localStorage.getItem('__marriage_date') || '');
   
   const [isEditingDates, setIsEditingDates] = useState(false);
+  
+  // Diary state
+  const [memories, setMemories] = useState<any[]>([]);
+  const [showAddMemory, setShowAddMemory] = useState(false);
+  const [newMemoryTitle, setNewMemoryTitle] = useState('');
+  const [newMemoryContent, setNewMemoryContent] = useState('');
+  const [newMemoryDate, setNewMemoryDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [sharedFundId, setSharedFundId] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('__love_date', loveDate);
     if (marriageDate) localStorage.setItem('__marriage_date', marriageDate);
   }, [loveDate, marriageDate]);
 
+  useEffect(() => {
+    const fetchMemories = async () => {
+      if (!user) return;
+      try {
+        const q = query(collection(db, 'shared_funds'), where('memberIds', 'array-contains', user.uid));
+        const fundsSnap = await getDocs(q);
+        let fundId = null;
+        if (!fundsSnap.empty) {
+          fundId = fundsSnap.docs[0].id;
+          setSharedFundId(fundId);
+        }
+
+        const memRefStr = fundId ? `couple_data/${fundId}/diaries` : `users/${user.uid}/diaries`;
+        const memSnap = await getDocs(query(collection(db, memRefStr), orderBy('date', 'desc')));
+        
+        if (!memSnap.empty) {
+          const fetchedMemories = memSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setMemories(fetchedMemories);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchMemories();
+  }, [user]);
+
   const calculateTime = (dateString: string) => {
     if (!dateString) return null;
     const start = new Date(dateString);
     const now = new Date();
     
-    // Set time to midnight for accurate days calculation
     start.setHours(0, 0, 0, 0);
     now.setHours(0, 0, 0, 0);
 
@@ -37,46 +77,53 @@ export default function LoveMemory() {
     return { years, months, days, totalDays };
   };
 
-  const startQuiz = () => {
-    setQuizState('playing');
-    setCurrentQuestionIndex(0);
-    setScore(0);
-    setSelectedAnswer(null);
-    setIsAnswerRevealed(false);
+  const handleAddMemory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemoryTitle.trim() || !user) return;
+
+    try {
+      const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
+      const docRef = doc(collection(db, memRefStr));
+      const newMemory = {
+        title: newMemoryTitle,
+        content: newMemoryContent,
+        date: newMemoryDate,
+        createdAt: serverTimestamp()
+      };
+      await setDoc(docRef, newMemory);
+      setMemories([{ id: docRef.id, ...newMemory }, ...memories]);
+      setNewMemoryTitle('');
+      setNewMemoryContent('');
+      setNewMemoryDate(new Date().toISOString().split('T')[0]);
+      setShowAddMemory(false);
+    } catch(err) {
+      console.error(err);
+    }
   };
 
-  const handleAnswer = (index: number) => {
-    if (isAnswerRevealed) return;
-    setSelectedAnswer(index);
-    setIsAnswerRevealed(true);
-    
-    if (index === questions[currentQuestionIndex].correctIndex) {
-      setScore(s => s + 1);
+  const handleDeleteMemory = async (id: string) => {
+    if (!user) return; 
+    try {
+      const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
+      await deleteDoc(doc(db, memRefStr, id));
+      setMemories(memories.filter(m => m.id !== id));
+    } catch(err) {
+      console.error(err);
     }
-
-    setTimeout(() => {
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(i => i + 1);
-        setSelectedAnswer(null);
-        setIsAnswerRevealed(false);
-      } else {
-        setQuizState('finished');
-      }
-    }, 1500);
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-10">
       <div className="text-center space-y-2 mb-8 pt-4">
-        <h2 className="text-4xl font-display font-bold text-orange-600 tracking-tight flex items-center justify-center gap-3">
-          <Heart className="w-10 h-10 fill-orange-500" />
+        <h2 className="text-4xl font-display font-bold text-pink-600 tracking-tight flex items-center justify-center gap-3">
+          <Heart className="w-10 h-10 fill-pink-500" />
           Góc Kỷ Niệm
         </h2>
-        <p className="text-neutral-500 text-lg">Cùng nhau đếm ngược thanh xuân và thử tài thấu hiểu nhau.</p>
+        <p className="text-neutral-500 text-lg">Cùng nhau đếm ngược thanh xuân và ghi lại những khoảnh khắc.</p>
       </div>
 
       {/* Time Counters */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-orange-100/50 border border-orange-50/50 relative overflow-hidden">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-pink-100/50 border border-pink-50/50 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-5">
           <Clock className="w-32 h-32" />
         </div>
@@ -85,7 +132,7 @@ export default function LoveMemory() {
           <h3 className="text-2xl font-bold font-display text-neutral-800">Bộ đếm thời gian</h3>
           <button 
             onClick={() => setIsEditingDates(!isEditingDates)}
-            className="text-sm font-semibold text-orange-500 hover:text-orange-600 px-3 py-1.5 bg-orange-50 rounded-3xl"
+            className="text-sm font-semibold text-pink-500 hover:text-pink-600 px-3 py-1.5 bg-pink-50 rounded-3xl"
           >
             {isEditingDates ? 'Xong' : 'Chỉnh sửa ngày'}
           </button>
@@ -95,11 +142,11 @@ export default function LoveMemory() {
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid md:grid-cols-2 gap-4 mb-8 bg-neutral-50 p-4 rounded-3xl">
             <div>
               <label className="block text-sm font-medium text-neutral-600 mb-1">Ngày chính thức yêu nhau</label>
-              <input type="date" value={loveDate} onChange={e => setLoveDate(e.target.value)} className="w-full p-2.5 rounded-3xl border border-neutral-200 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100" />
+              <input type="date" value={loveDate} onChange={e => setLoveDate(e.target.value)} className="w-full p-2.5 rounded-3xl border border-neutral-200 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100" />
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-600 mb-1">Ngày cưới (tuỳ chọn)</label>
-              <input type="date" value={marriageDate} onChange={e => setMarriageDate(e.target.value)} className="w-full p-2.5 rounded-3xl border border-neutral-200 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100" />
+              <input type="date" value={marriageDate} onChange={e => setMarriageDate(e.target.value)} className="w-full p-2.5 rounded-3xl border border-neutral-200 outline-none focus:border-pink-300 focus:ring-2 focus:ring-pink-100" />
             </div>
           </motion.div>
         )}
@@ -107,17 +154,17 @@ export default function LoveMemory() {
         <div className="grid md:grid-cols-2 gap-6 relative z-10">
           {/* Love Duration */}
           {loveDate && (
-            <div className="bg-neo-bg rounded-3xl p-6 border border-orange-100">
-              <div className="flex items-center gap-2 text-orange-600 mb-4 font-semibold uppercase tracking-wider text-sm">
-                <Heart className="w-4 h-4 fill-orange-500" /> Đã yêu nhau
+            <div className="bg-neo-bg rounded-3xl p-6 border border-pink-100">
+              <div className="flex items-center gap-2 text-pink-600 mb-4 font-semibold uppercase tracking-wider text-sm">
+                <Heart className="w-4 h-4 fill-pink-500" /> Đã yêu nhau
               </div>
               <div className="flex flex-col items-center">
-                <span className="text-5xl font-black font-display text-orange-600 tracking-tight leading-none mb-2">
+                <span className="text-5xl font-black font-display text-pink-600 tracking-tight leading-none mb-2">
                   {calculateTime(loveDate)?.totalDays || 0}
                 </span>
-                <span className="text-orange-400 font-medium mb-4">Ngày</span>
+                <span className="text-pink-400 font-medium mb-4">Ngày</span>
                 
-                <div className="flex gap-4 text-center divide-x divide-orange-200 w-full justify-center">
+                <div className="flex gap-4 text-center divide-x divide-pink-200 w-full justify-center">
                   <div className="px-4">
                     <div className="text-2xl font-bold text-neutral-800">{calculateTime(loveDate)?.years || 0}</div>
                     <div className="text-xs text-neutral-500 uppercase">Năm</div>
@@ -169,9 +216,116 @@ export default function LoveMemory() {
                 <Calendar className="w-6 h-6 text-neutral-400" />
               </div>
               <p className="text-neutral-500 font-medium max-w-xs">Chưa có thông tin ngày đăng ký kết hôn / ngày cưới.</p>
-              <button onClick={() => setIsEditingDates(true)} className="mt-4 text-sm font-bold text-orange-500">Cập nhật ngay</button>
+              <button onClick={() => setIsEditingDates(true)} className="mt-4 text-sm font-bold text-pink-500">Cập nhật ngay</button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Love Diary */}
+      <div className="space-y-4 pt-4">
+        <div className="flex justify-between items-center mb-4 px-2">
+          <h3 className="text-2xl font-bold font-display text-neutral-800 flex items-center gap-2">
+            <BookHeart className="w-6 h-6 text-pink-500" /> Nhật ký tình yêu
+          </h3>
+          <button 
+            onClick={() => setShowAddMemory(!showAddMemory)}
+            className="flex items-center gap-1.5 bg-neutral-900 text-white px-4 py-2 rounded-full text-sm font-bold hover:bg-neutral-800 transition-colors"
+          >
+            {showAddMemory ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showAddMemory ? 'Đóng' : 'Thêm kỷ niệm'}
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {showAddMemory && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden mb-6"
+            >
+              <form onSubmit={handleAddMemory} className="bg-white p-6 rounded-3xl shadow-sm border border-pink-100 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest mb-1">Tiêu đề / Sự kiện</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={newMemoryTitle}
+                      onChange={e => setNewMemoryTitle(e.target.value)}
+                      className="w-full border-b-2 border-neutral-200 py-2 px-1 outline-none focus:border-pink-500 transition-colors bg-transparent font-medium"
+                      placeholder="Ví dụ: Chuyến đi du lịch đầu tiên..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest mb-1">Ngày diễn ra</label>
+                    <input 
+                      type="date" 
+                      required
+                      value={newMemoryDate}
+                      onChange={e => setNewMemoryDate(e.target.value)}
+                      className="w-full border-b-2 border-neutral-200 py-2 px-1 outline-none focus:border-pink-500 transition-colors bg-transparent font-medium"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest mb-1">Nội dung</label>
+                  <textarea 
+                    value={newMemoryContent}
+                    onChange={e => setNewMemoryContent(e.target.value)}
+                    className="w-full border-b-2 border-neutral-200 py-2 px-1 outline-none focus:border-pink-500 transition-colors bg-transparent min-h-[100px]"
+                    placeholder="Lưu lại những cảm xúc, kỷ niệm đáng nhớ..."
+                  />
+                </div>
+                <div className="pt-2 text-right">
+                  <button type="submit" className="bg-pink-500 text-white font-bold px-6 py-2 rounded-3xl hover:bg-pink-600 transition-colors">
+                    Lưu Khoảnh Khắc
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="space-y-4">
+          <AnimatePresence mode="popLayout">
+            {memories.length === 0 && !showAddMemory && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10 bg-white/50 rounded-3xl border border-dashed border-neutral-300">
+                <BookHeart className="w-12 h-12 text-neutral-300 mx-auto mb-2" />
+                <p className="text-neutral-500">Chưa có kỷ niệm nào được ghi lại.</p>
+              </motion.div>
+            )}
+            
+            {memories.map((mem) => (
+              <motion.div 
+                layout
+                key={mem.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-white p-6 rounded-3xl shadow-sm border border-neutral-100 flex flex-col md:flex-row gap-6 relative group hover:shadow-md transition-shadow"
+              >
+                <div className="md:w-32 shrink-0 flex flex-col justify-center items-center text-center bg-pink-50 text-pink-700 rounded-3xl p-4">
+                  <span className="text-3xl font-black font-display leading-none">{new Date(mem.date).getDate()}</span>
+                  <span className="text-sm font-bold uppercase tracking-widest mt-1">Th {new Date(mem.date).getMonth() + 1}</span>
+                  <span className="text-xs text-pink-500/80 font-medium">{new Date(mem.date).getFullYear()}</span>
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <h4 className="text-xl font-bold text-neutral-900 mb-2 truncate" title={mem.title}>{mem.title}</h4>
+                  <p className="text-neutral-600 whitespace-pre-wrap text-sm leading-relaxed">{mem.content}</p>
+                </div>
+                
+                <button 
+                  onClick={() => handleDeleteMemory(mem.id)}
+                  className="absolute top-4 right-4 md:opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-all"
+                  title="Xoá kỷ niệm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       </div>
     </div>

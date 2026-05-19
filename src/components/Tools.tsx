@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart } from 'lucide-react';
+import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart, LineChart, Users, ArrowRightLeft } from 'lucide-react';
 import { useCurrency } from '../lib/CurrencyContext';
 
 interface ToolsProps {
@@ -44,6 +44,96 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
     const n = parsedLoanMonths;
     monthlyPayment = parsedLoanAmt * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
     totalPayment = monthlyPayment * n;
+  }
+
+  // Tiết kiệm mục tiêu
+  const [goalAmount, setGoalAmount] = useState<string>('');
+  const [goalYears, setGoalYears] = useState<string>('');
+  const [goalRate, setGoalRate] = useState<string>('');
+
+  const parsedGoalAmt = parseFloat(goalAmount) || 0;
+  const parsedGoalYears = parseInt(goalYears) || 0;
+  const parsedGoalRate = parseFloat(goalRate) || 0;
+
+  let monthlySavingsNeeded = 0;
+  if (parsedGoalAmt > 0 && parsedGoalYears > 0) {
+    if (parsedGoalRate > 0) {
+      const r = parsedGoalRate / 100 / 12;
+      const n = parsedGoalYears * 12;
+      monthlySavingsNeeded = parsedGoalAmt * (r / (Math.pow(1 + r, n) - 1));
+    } else {
+      monthlySavingsNeeded = parsedGoalAmt / (parsedGoalYears * 12);
+    }
+  }
+
+  // Máy tính lạm phát
+  const [infAmount, setInfAmount] = useState<string>('');
+  const [infRate, setInfRate] = useState<string>('3.5');
+  const [infYears, setInfYears] = useState<string>('');
+
+  const parsedInfAmt = parseFloat(infAmount) || 0;
+  const parsedInfRate = parseFloat(infRate) || 0;
+  const parsedInfYears = parseInt(infYears) || 0;
+
+  const futurePurchasingPower = parsedInfAmt / Math.pow(1 + (parsedInfRate / 100), parsedInfYears);
+  const futureCost = parsedInfAmt * Math.pow(1 + (parsedInfRate / 100), parsedInfYears);
+
+  // Chia tiền bill
+  const [billAmount, setBillAmount] = useState<string>('');
+  const [tipPercent, setTipPercent] = useState<string>('');
+  const [peopleCount, setPeopleCount] = useState<string>('2');
+
+  const parsedBill = parseFloat(billAmount) || 0;
+  const parsedTip = parseFloat(tipPercent) || 0;
+  const parsedPeople = parseInt(peopleCount) || 1;
+
+  const totalTip = parsedBill * (parsedTip / 100);
+  const totalBillWithTip = parsedBill + totalTip;
+  const amountPerPerson = parsedPeople > 0 ? totalBillWithTip / parsedPeople : 0;
+
+  // Quy đổi ngoại tệ
+  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
+  const [baseCurrency, setBaseCurrency] = useState<string>('USD');
+  const [targetCurrency, setTargetCurrency] = useState<string>('VND');
+  const [convertAmount, setConvertAmount] = useState<string>('1');
+
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const data = await response.json();
+        setExchangeRates(data.rates);
+      } catch (error) {
+        console.error("Failed to fetch exchange rates", error);
+      }
+    };
+    fetchRates();
+  }, []);
+
+  const parsedConvertAmount = parseFloat(convertAmount) || 0;
+  let convertedResult = 0;
+  if (exchangeRates[baseCurrency] && exchangeRates[targetCurrency] && parsedConvertAmount > 0) {
+    const usdAmount = parsedConvertAmount / exchangeRates[baseCurrency];
+    convertedResult = usdAmount * exchangeRates[targetCurrency];
+  }
+
+  // Tính ROI
+  const [roiInvested, setRoiInvested] = useState<string>('');
+  const [roiReturned, setRoiReturned] = useState<string>('');
+  const [roiYears, setRoiYears] = useState<string>('');
+
+  const parsedRoiInv = parseFloat(roiInvested) || 0;
+  const parsedRoiRet = parseFloat(roiReturned) || 0;
+  const parsedRoiYears = parseFloat(roiYears) || 0;
+
+  let totalRoi = 0;
+  let annualRoi = 0;
+  
+  if (parsedRoiInv > 0 && parsedRoiRet > 0) {
+    totalRoi = ((parsedRoiRet - parsedRoiInv) / parsedRoiInv) * 100;
+    if (parsedRoiYears > 0) {
+      annualRoi = (Math.pow(parsedRoiRet / parsedRoiInv, 1 / parsedRoiYears) - 1) * 100;
+    }
   }
 
   const TIPS = [
@@ -175,6 +265,222 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
             </div>
           </motion.div>
 
+          {/* Tiết kiệm mục tiêu */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white text-neo-dark rounded-3xl p-8 shadow-sm border border-neutral-200"
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-teal-50 text-teal-600 rounded-3xl">
+                <Target className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-neo-dark">Tính Mục Tiêu Tiết Kiệm</h3>
+                <p className="text-sm text-neo-dark/70">Số tiền cần tiết kiệm mỗi tháng</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Mục tiêu ({currency})</label>
+                <input 
+                  type="number"
+                  placeholder="Ví dụ: 500000000"
+                  value={goalAmount}
+                  onChange={(e) => setGoalAmount(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-teal-200 transition-all font-mono font-medium text-neo-dark"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số năm</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 5"
+                    value={goalYears}
+                    onChange={(e) => setGoalYears(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-teal-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Lãi suất (%/Năm)</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 5"
+                    value={goalRate}
+                    onChange={(e) => setGoalRate(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-teal-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+              </div>
+
+              {parsedGoalAmt > 0 && parsedGoalYears > 0 && (
+                <div className="pt-4 border-t border-neutral-100 mt-2">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="text-sm font-semibold text-neo-dark/60">Cần tiết kiệm mỗi tháng:</span>
+                  </div>
+                  <span className="text-2xl font-mono font-bold text-teal-600">{formatMoney(monthlySavingsNeeded, 0)}</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Quick Split Bill */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white text-neo-dark rounded-3xl p-8 shadow-sm border border-neutral-200"
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-orange-50 text-orange-600 rounded-3xl">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-neo-dark">Chia Tiền Nhanh</h3>
+                <p className="text-sm text-neo-dark/70">Chia hóa đơn & Tips</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Tổng hóa đơn ({currency})</label>
+                <input 
+                  type="number"
+                  placeholder="Ví dụ: 1500000"
+                  value={billAmount}
+                  onChange={(e) => setBillAmount(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-orange-200 transition-all font-mono font-medium text-neo-dark"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Tip/VAT (%)</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 10"
+                    value={tipPercent}
+                    onChange={(e) => setTipPercent(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-orange-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số người</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 4"
+                    value={peopleCount}
+                    onChange={(e) => setPeopleCount(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-orange-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+              </div>
+
+              {parsedBill > 0 && parsedPeople > 0 && (
+                <div className="pt-4 border-t border-neutral-100 mt-2">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="text-sm font-semibold text-neo-dark/60">Mỗi người trả:</span>
+                  </div>
+                  <span className="text-2xl font-mono font-bold text-orange-600">{formatMoney(amountPerPerson, 0)}</span>
+                  <div className="text-xs text-neo-dark/60 mt-2">
+                    Tổng bill (gồm Tip): <span className="font-bold text-orange-500">{formatMoney(totalBillWithTip, 0)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Quy đổi tiền tệ */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white text-neo-dark rounded-3xl p-8 shadow-sm border border-neutral-200"
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-amber-50 text-amber-600 rounded-3xl">
+                <ArrowRightLeft className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-neo-dark">Quy Đổi Ngoại Tệ</h3>
+                <p className="text-sm text-neo-dark/70">Tỷ giá cập nhật liên tục</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số lượng</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="number"
+                    placeholder="VD: 100"
+                    value={convertAmount}
+                    onChange={(e) => setConvertAmount(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-amber-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-5 gap-2 items-center">
+                <div className="col-span-2 space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Từ</label>
+                  <select 
+                    value={baseCurrency}
+                    onChange={(e) => setBaseCurrency(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-amber-200 text-neo-dark font-medium cursor-pointer"
+                  >
+                    {Object.keys(exchangeRates).length > 0 ? (
+                      Object.keys(exchangeRates).map((curr) => (
+                        <option key={`base-${curr}`} value={curr}>{curr}</option>
+                      ))
+                    ) : (
+                      <option value="USD">USD</option>
+                    )}
+                  </select>
+                </div>
+                
+                <div className="col-span-1 flex justify-center items-end pb-1">
+                  <button 
+                    onClick={() => {
+                        setBaseCurrency(targetCurrency);
+                        setTargetCurrency(baseCurrency);
+                    }}
+                    className="p-2 text-neutral-400 hover:text-amber-500 hover:bg-amber-50 rounded-full transition-all"
+                  >
+                    <ArrowRightLeft className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="col-span-2 space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Sang</label>
+                  <select 
+                    value={targetCurrency}
+                    onChange={(e) => setTargetCurrency(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-amber-200 text-neo-dark font-medium cursor-pointer"
+                  >
+                    {Object.keys(exchangeRates).length > 0 ? (
+                      Object.keys(exchangeRates).map((curr) => (
+                        <option key={`target-${curr}`} value={curr}>{curr}</option>
+                      ))
+                    ) : (
+                      <option value="VND">VND</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {parsedConvertAmount > 0 && Object.keys(exchangeRates).length > 0 && (
+                <div className="pt-4 border-t border-neutral-100 mt-2">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="text-sm font-semibold text-neo-dark/60">Kết quả:</span>
+                  </div>
+                  <span className="text-2xl font-mono font-bold text-amber-600">
+                    {convertedResult.toLocaleString(undefined, { maximumFractionDigits: 2 })} {targetCurrency}
+                  </span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
         </div>
 
         <div className="space-y-8">
@@ -302,6 +608,140 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
                   <span className="text-2xl font-mono font-bold text-blue-600">{formatMoney(monthlyPayment, 0)}</span>
                   <div className="text-xs text-neo-dark/60 mt-2">
                     Tổng lãi phải trả: <span className="font-bold text-blue-500">{formatMoney(totalPayment - parsedLoanAmt, 0)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Máy tính lạm phát */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-8 shadow-sm border border-neutral-200"
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-red-50 text-red-600 rounded-3xl">
+                <LineChart className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-neo-dark">Máy Tính Lạm Phát</h3>
+                <p className="text-sm text-neo-dark/70">Sự mất giá của tiền tệ</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số tiền ({currency})</label>
+                <input 
+                  type="number"
+                  placeholder="Ví dụ: 1000000"
+                  value={infAmount}
+                  onChange={(e) => setInfAmount(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-red-200 transition-all font-mono font-medium text-neo-dark"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Lạm phát/Năm (%)</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 3.5"
+                    value={infRate}
+                    onChange={(e) => setInfRate(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-red-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số năm</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 10"
+                    value={infYears}
+                    onChange={(e) => setInfYears(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-red-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+              </div>
+
+              {parsedInfAmt > 0 && parsedInfYears > 0 && (
+                <div className="pt-4 border-t border-neutral-100 mt-2">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="text-sm font-semibold text-neo-dark/60">Sức mua thực tế còn lại:</span>
+                  </div>
+                  <span className="text-2xl font-mono font-bold text-red-600">{formatMoney(futurePurchasingPower, 0)}</span>
+                  <div className="text-xs text-neo-dark/60 mt-2">
+                    Món đồ giá <span className="font-bold">{formatMoney(parsedInfAmt, 0)}</span> hiện tại sẽ có giá <span className="font-bold text-red-500">{formatMoney(futureCost, 0)}</span>.
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Tính ROI */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-8 shadow-sm border border-neutral-200"
+          >
+            <div className="flex items-center gap-3 mb-8">
+              <div className="p-3 bg-fuchsia-50 text-fuchsia-600 rounded-3xl">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-neo-dark">Hiệu Quả Đầu Tư (ROI)</h3>
+                <p className="text-sm text-neo-dark/70">Đo lường tỷ suất lợi nhuận</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Vốn đầu tư ban đầu ({currency})</label>
+                <input 
+                  type="number"
+                  placeholder="Ví dụ: 50000000"
+                  value={roiInvested}
+                  onChange={(e) => setRoiInvested(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-fuchsia-200 transition-all font-mono font-medium text-neo-dark"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Thu về ({currency})</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 60000000"
+                    value={roiReturned}
+                    onChange={(e) => setRoiReturned(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-fuchsia-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-neo-dark/70 uppercase tracking-widest pl-1">Số năm</label>
+                  <input 
+                    type="number"
+                    placeholder="VD: 1.5"
+                    value={roiYears}
+                    onChange={(e) => setRoiYears(e.target.value)}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm focus:ring-2 focus:ring-fuchsia-200 transition-all font-mono font-medium text-neo-dark"
+                  />
+                </div>
+              </div>
+
+              {parsedRoiInv > 0 && parsedRoiRet > 0 && (
+                <div className="pt-4 border-t border-neutral-100 mt-2">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-semibold text-neo-dark/60">Tỷ suất lợi nhuận (ROI):</span>
+                    <span className={`text-xl font-mono font-bold ${totalRoi >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{totalRoi > 0 ? '+' : ''}{totalRoi.toFixed(2)}%</span>
+                  </div>
+                  {parsedRoiYears > 0 && (
+                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-neutral-50">
+                      <span className="text-sm font-semibold text-neo-dark/60">Lợi nhuận gộp năm:</span>
+                      <span className={`text-lg font-mono font-bold ${annualRoi >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{annualRoi > 0 ? '+' : ''}{annualRoi.toFixed(2)}%</span>
+                    </div>
+                  )}
+                  <div className="text-xs text-neo-dark/60 mt-3 text-right">
+                    Lãi/Lỗ: <span className={`font-bold ${totalRoi >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{totalRoi > 0 ? '+' : ''}{formatMoney(parsedRoiRet - parsedRoiInv, 0)}</span>
                   </div>
                 </div>
               )}

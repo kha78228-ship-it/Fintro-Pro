@@ -29,13 +29,13 @@ const ForgetMeNots = lazy(() => import("./components/ForgetMeNots"));
 const CycleTracker = lazy(() => import("./components/CycleTracker"));
 const PhotoAlbum = lazy(() => import("./components/PhotoAlbum"));
 const NotificationCenter = lazy(() => import("./components/NotificationCenter"));
-import Onboarding from "./components/Onboarding";
+const Onboarding = lazy(() => import("./components/Onboarding"));
 
 // Finance Components
-import Dashboard from "./components/Dashboard";
-import TransactionForm from "./components/TransactionForm";
-import TransactionList from "./components/TransactionList";
-import CalendarView from "./components/CalendarView";
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const TransactionForm = lazy(() => import("./components/TransactionForm"));
+const TransactionList = lazy(() => import("./components/TransactionList"));
+const CalendarView = lazy(() => import("./components/CalendarView"));
 const Planning = lazy(() => import("./components/Planning"));
 const SharedFund = lazy(() => import("./components/SharedFund"));
 const Reports = lazy(() => import("./components/Reports"));
@@ -194,7 +194,8 @@ type View =
   | "photo_album"
   | "settings"
   | "social_feed"
-  | "notifications";
+  | "notifications"
+  | "friends";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -203,7 +204,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentView, setCurrentView] = useState<View>("dashboard");
-  const [showFriends, setShowFriends] = useState(false);
   const [appMode, setAppMode] = useState<"finance" | "love" | "entertainment">(
     "finance",
   );
@@ -345,7 +345,7 @@ export default function App() {
               ? Date.now() - chatData.updatedAt.toMillis() < 5000
               : false;
 
-            if (isRecent && !showFriends) {
+            if (isRecent && currentView !== "friends") {
               const title = "Tin nhắn mới từ bạn bè! 💬";
               const body =
                 chatData.lastMessage.substring(0, 50) +
@@ -364,7 +364,7 @@ export default function App() {
                   });
                   notification.onclick = () => {
                     window.focus();
-                    setShowFriends(true); // Open friends view when clicked
+                    setCurrentView("friends"); // Open friends view when clicked
                     notification.close();
                   };
                 }
@@ -381,7 +381,7 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, 'chats');
     });
     return () => unsubscribe();
-  }, [user, showFriends]);
+  }, [user, currentView]);
   // Incoming call listener
   useEffect(() => {
     if (!user) return;
@@ -954,12 +954,14 @@ export default function App() {
 
   if (!hasSeenOnboarding) {
     return (
-      <Onboarding
-        onComplete={() => {
-          localStorage.setItem("__has_seen_onboarding", "true");
-          setHasSeenOnboarding(true);
-        }}
-      />
+      <Suspense fallback={<div className="min-h-screen bg-neo-bg flex items-center justify-center -m-4"><Loader2 className="w-8 h-8 animate-spin text-neo-orange" /></div>}>
+        <Onboarding
+          onComplete={() => {
+            localStorage.setItem("__has_seen_onboarding", "true");
+            setHasSeenOnboarding(true);
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -1094,7 +1096,6 @@ export default function App() {
                     <Sparkles className={`w-3 h-3 md:w-4 md:h-4 ${appTheme === 'vietnam' ? 'text-white' : 'text-neo-dark'}`} />
                   </motion.div>
                 </div>
-                <div className={`absolute w-[32%] h-[32%] rounded-3xl border-2 z-10 ${appTheme === 'vietnam' ? 'border-white bg-[#ff3b3b]' : 'border-neo-dark bg-neo-light'}`} />
               </motion.div>
             </div>
             <div className="font-bold text-sm tracking-widest uppercase flex flex-col leading-none">
@@ -1485,11 +1486,48 @@ export default function App() {
 
       {/* Header */}
       <header
-        className="sticky top-0 z-30 bg-neo-light/95 backdrop-blur-md border-b border-neo-dark"
+        className="sticky top-0 z-50 bg-neo-light/95 backdrop-blur-md border-b border-neo-dark flex flex-col"
         style={{ willChange: "transform" }}
       >
+        <AnimatePresence>
+          {systemAnnouncement &&
+            !systemAnnouncement.hiddenLocally &&
+            systemAnnouncement.isMarquee && (
+              <div
+                className="w-full relative shadow-sm pointer-events-auto border-b border-neo-dark"
+                style={{
+                  backgroundColor: systemAnnouncement.backgroundColor || "#fbbf24",
+                  color: systemAnnouncement.textColor || "#000",
+                  fontFamily: systemAnnouncement.fontFamily || "Inter",
+                }}
+              >
+                <div
+                  className="whitespace-nowrap overflow-hidden py-2"
+                  style={{ fontSize: `${systemAnnouncement.fontSize || 14}px` }}
+                >
+                  <div className="animate-marquee inline-block font-bold mt-1">
+                    <span className="mx-8">{systemAnnouncement.text}</span>
+                    <span className="mx-8">{systemAnnouncement.text}</span>
+                    <span className="mx-8">{systemAnnouncement.text}</span>
+                    <span className="mx-8">{systemAnnouncement.text}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    setSystemAnnouncement({
+                      ...systemAnnouncement,
+                      hiddenLocally: true,
+                    })
+                  }
+                  className="absolute top-1/2 -translate-y-1/2 right-2 bg-black/10 hover:bg-black/20 rounded-3xl p-1 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+        </AnimatePresence>
         <div
-          className={`mx-auto px-4 md:px-8 h-20 flex items-center justify-between ${appMode === "finance" ? "max-w-[1600px]" : "max-w-[1600px]"} border-x border-neo-dark/10`}
+          className={`mx-auto px-4 md:px-8 h-20 w-full flex items-center justify-between ${appMode === "finance" ? "max-w-[1600px]" : "max-w-[1600px]"} border-x border-neo-dark/10`}
         >
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
@@ -1517,7 +1555,6 @@ export default function App() {
                     <Sparkles className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${appTheme === 'vietnam' ? 'text-white' : 'text-neo-dark'}`} />
                   </motion.div>
                 </div>
-                <div className={`absolute w-[32%] h-[32%] rounded-3xl border-2 z-10 ${appTheme === 'vietnam' ? 'border-white bg-[#ff3b3b]' : 'border-neo-dark bg-neo-light'}`} />
               </motion.div>
             </div>
             <div className="flex flex-col leading-none hidden sm:flex">
@@ -1595,9 +1632,9 @@ export default function App() {
               <Bell className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setShowFriends(!showFriends)}
+              onClick={() => setCurrentView("friends")}
               title="Kết nối & Tin nhắn"
-              className={`p-2 sm:p-2.5 transition-all border ${appTheme === 'vietnam' ? (showFriends ? "bg-[#00bfff] text-white border-[#00bfff] rounded-3xl shadow-md" : "text-[#ff3b3b] border-transparent rounded-3xl hover:bg-[#00bfff] hover:text-white") : (showFriends ? "rounded-3xl bg-neo-dark text-neo-light border-neo-dark" : "rounded-3xl border-transparent text-neo-dark hover:bg-neo-orange hover:text-white hover:border-neo-dark")}`}
+              className={`p-2 sm:p-2.5 transition-all border ${appTheme === 'vietnam' ? (currentView === "friends" ? "bg-[#00bfff] text-white border-[#00bfff] rounded-3xl shadow-md" : "text-[#ff3b3b] border-transparent rounded-3xl hover:bg-[#00bfff] hover:text-white") : (currentView === "friends" ? "rounded-3xl bg-neo-dark text-neo-light border-neo-dark" : "rounded-3xl border-transparent text-neo-dark hover:bg-neo-orange hover:text-white hover:border-neo-dark")}`}
             >
               <Users className="w-5 h-5" />
             </button>
@@ -1731,7 +1768,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
             >
-              <LoveMemory />
+              <LoveMemory user={user} />
             </motion.div>
           )}
 
@@ -1775,7 +1812,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
             >
-              <DateIdeas />
+              <DateIdeas user={user} />
             </motion.div>
           )}
 
@@ -1835,6 +1872,23 @@ export default function App() {
               <Suspense fallback={<div className="h-40 flex justify-center items-center">Đang tải...</div>}>
                 <NotificationCenter onNavigate={setCurrentView} />
               </Suspense>
+            </motion.div>
+          )}
+
+          {currentView === "friends" && user && (
+            <motion.div
+              key="friends"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <FriendsView
+                user={user}
+                onClose={() => setCurrentView("social_feed")}
+                onStartCall={(friendId, isVideo = true) =>
+                  setActiveCall({ friendId, isIncoming: false, isVideo })
+                }
+              />
             </motion.div>
           )}
 
@@ -1996,63 +2050,22 @@ export default function App() {
       )}
 
       {appMode === "finance" && (
-        <TransactionForm
-          isOpen={isTransactionFormOpen}
-          onClose={() => setIsTransactionFormOpen(false)}
-          onSuccess={() => setIsTransactionFormOpen(false)}
-          transactions={transactions}
-        />
+        <Suspense fallback={null}>
+          <TransactionForm
+            isOpen={isTransactionFormOpen}
+            onClose={() => setIsTransactionFormOpen(false)}
+            onSuccess={() => setIsTransactionFormOpen(false)}
+            transactions={transactions}
+          />
+        </Suspense>
       )}
 
-      <AnimatePresence>
-        {showFriends && user && (
-          <FriendsView
-            user={user}
-            onClose={() => setShowFriends(false)}
-            onStartCall={(friendId, isVideo = true) =>
-              setActiveCall({ friendId, isIncoming: false, isVideo })
-            }
-          />
-        )}
-      </AnimatePresence>
+
 
       <AnimatePresence>
         {systemAnnouncement &&
           !systemAnnouncement.hiddenLocally &&
-          (systemAnnouncement.isMarquee ? (
-            <div
-              className="fixed top-0 left-0 right-0 z-[100] pointer-events-none shadow-sm"
-              style={{
-                backgroundColor:
-                  systemAnnouncement.backgroundColor || "#fbbf24",
-                color: systemAnnouncement.textColor || "#000",
-                fontFamily: systemAnnouncement.fontFamily || "Inter",
-              }}
-            >
-              <div
-                className="whitespace-nowrap overflow-hidden py-3"
-                style={{ fontSize: `${systemAnnouncement.fontSize || 16}px` }}
-              >
-                <div className="animate-marquee inline-block font-bold">
-                  <span className="mx-8">{systemAnnouncement.text}</span>
-                  <span className="mx-8">{systemAnnouncement.text}</span>
-                  <span className="mx-8">{systemAnnouncement.text}</span>
-                  <span className="mx-8">{systemAnnouncement.text}</span>
-                </div>
-              </div>
-              <button
-                onClick={() =>
-                  setSystemAnnouncement({
-                    ...systemAnnouncement,
-                    hiddenLocally: true,
-                  })
-                }
-                className="absolute top-1/2 -translate-y-1/2 right-2 pointer-events-auto bg-black/10 hover:bg-black/20 rounded-3xl p-1.5 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          ) : (
+          !systemAnnouncement.isMarquee && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -2089,7 +2102,7 @@ export default function App() {
                 </div>
               </motion.div>
             </div>
-          ))}
+          )}
 
         {activeCall && (
           <VideoCall
@@ -2110,7 +2123,7 @@ export default function App() {
             exit={{ opacity: 0, y: -50, scale: 0.95 }}
             className={`fixed top-6 right-6 md:top-10 md:right-10 z-[300] bg-white rounded-3xl p-4 shadow-2xl border flex items-start gap-4 max-w-sm cursor-pointer ${appToast.type === "error" ? "border-orange-200" : "border-neutral-100"}`}
             onClick={() => {
-              if (appToast.type !== "error") setShowFriends(true);
+              if (appToast.type !== "error") setCurrentView("friends");
               setAppToast(null);
             }}
           >
@@ -2138,11 +2151,13 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <AiChatWidget
-        transactions={filteredTransactions}
-        appMode={appMode}
-        user={user}
-      />
+      <Suspense fallback={null}>
+        <AiChatWidget
+          transactions={filteredTransactions}
+          appMode={appMode}
+          user={user}
+        />
+      </Suspense>
     </div>
   );
 }

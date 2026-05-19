@@ -223,13 +223,34 @@ export default function SharedFund({ user }: SharedFundProps) {
     }
   };
 
+  const handleUpdateContributionPercent = async (uid: string, percent: string) => {
+    if (!sharedFundDoc) return;
+    const val = parseFloat(percent) || 0;
+    try {
+      const fundRef = doc(db, 'shared_funds', sharedFundDoc.id);
+      await updateDoc(fundRef, {
+        [`members.${uid}.contributionPercent`]: val
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `shared_funds/${sharedFundDoc.id}`);
+    }
+  };
+
   const memberList = Object.entries(members || {}).map(([uid, m]) => {
     const mem = m as any;
-    return { uid, role: mem?.role, income: mem?.income, displayName: mem?.displayName, customRatio: mem?.customRatio };
+    return { 
+      uid, 
+      role: mem?.role, 
+      income: mem?.income, 
+      displayName: mem?.displayName, 
+      customRatio: mem?.customRatio,
+      contributionPercent: mem?.contributionPercent !== undefined ? mem.contributionPercent : 100
+    };
   });
   const totalIncome = memberList.reduce((acc, m) => acc + (m.income || 0), 0);
+  const totalContributed = memberList.reduce((acc, m) => acc + ((m.income || 0) * (m.contributionPercent / 100)), 0);
   const totalCustomRatio = memberList.reduce((acc, m) => acc + (m.customRatio || 0), 0);
-  const parsedSharedTotal = totalIncome;
+  const parsedSharedTotal = totalContributed;
 
   const handleCopyLink = () => {
     if (!sharedFundDoc) return;
@@ -271,6 +292,19 @@ export default function SharedFund({ user }: SharedFundProps) {
       const fundRef = doc(db, 'shared_funds', sharedFundDoc.id);
       await updateDoc(fundRef, {
         funds: funds.filter(f => f.id !== id)
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `shared_funds/${sharedFundDoc.id}`);
+    }
+  };
+
+  const handleUpdateFundPercent = async (id: string, newPercentStr: string) => {
+    if (!sharedFundDoc) return;
+    const newPercent = parseFloat(newPercentStr) || 0;
+    try {
+      const fundRef = doc(db, 'shared_funds', sharedFundDoc.id);
+      await updateDoc(fundRef, {
+        funds: funds.map(f => f.id === id ? { ...f, percent: newPercent } : f)
       });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `shared_funds/${sharedFundDoc.id}`);
@@ -466,33 +500,56 @@ export default function SharedFund({ user }: SharedFundProps) {
                      </div>
                   ) : (
                     <div className="flex-1">
-                      <label className="text-xs font-bold text-orange-800 uppercase tracking-widest block mb-2">{m.displayName} {m.role === 'owner' ? '(Trưởng nhóm)' : ''}</label>
-                      {m.uid === user.uid ? (
-                        <>
-                        <input 
-                          type="number"
-                          placeholder="Nhập thu nhập của bạn..."
-                          value={myIncomeSync}
-                          onChange={(e) => setMyIncomeSync(e.target.value)}
-                          onBlur={(e) => handleUpdateIncome(e.target.value)}
-                          className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 transition-all font-mono font-medium"
-                        />
-                        <button 
-                          onClick={async () => {
-                            if (!user) return;
-                            const q = query(collection(db, 'transactions'), where('userId', '==', user.uid), where('type', '==', 'income'));
-                            const snap = await getDocs(q);
-                            const totalIncome = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
-                            handleUpdateIncome(totalIncome.toString());
-                          }}
-                          className="text-xs font-semibold text-orange-700 hover:text-orange-900 mt-2 block w-full text-center"
-                        >
-                          ↻ Cập nhật từ giao dịch của mình
-                        </button>
-                        </>
-                      ) : (
-                        <div className="text-lg font-mono font-bold text-neutral-900">{formatMoney(Number(m.income))}</div>
-                      )}
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-orange-800 uppercase tracking-widest">{m.displayName} {m.role === 'owner' ? '(Trưởng nhóm)' : ''}</label>
+                      </div>
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="text-xs text-neutral-500 mb-1 block">Thu nhập</label>
+                          {m.uid === user.uid ? (
+                            <>
+                            <input 
+                              type="number"
+                              placeholder="Nhập thu nhập..."
+                              value={myIncomeSync}
+                              onChange={(e) => setMyIncomeSync(e.target.value)}
+                              onBlur={(e) => handleUpdateIncome(e.target.value)}
+                              className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 transition-all font-mono font-medium"
+                            />
+                            <button 
+                              onClick={async () => {
+                                if (!user) return;
+                                const q = query(collection(db, 'transactions'), where('userId', '==', user.uid), where('type', '==', 'income'));
+                                const snap = await getDocs(q);
+                                const totalInc = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
+                                handleUpdateIncome(totalInc.toString());
+                              }}
+                              className="text-[10px] font-semibold text-orange-700 hover:text-orange-900 mt-2 block w-full text-center"
+                            >
+                              ↻ Lấy từ giao dịch
+                            </button>
+                            </>
+                          ) : (
+                            <div className="text-lg font-mono font-bold text-neutral-900 mt-2">{formatMoney(Number(m.income))}</div>
+                          )}
+                        </div>
+                        <div className="w-24 border-l pl-4 border-orange-100 flex flex-col">
+                          <label className="text-xs text-neutral-500 mb-1 block">% góp quỹ</label>
+                          {(m.uid === user.uid || sharedFundDoc?.ownerId === user.uid) ? (
+                            <div className="relative">
+                               <input 
+                                  type="number"
+                                  defaultValue={m.contributionPercent}
+                                  onBlur={(e) => handleUpdateContributionPercent(m.uid, e.target.value)}
+                                  className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl p-3 pr-6 text-sm outline-none focus:ring-2 focus:ring-orange-500 transition-all font-mono font-medium"
+                               />
+                               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 font-mono text-sm">%</span>
+                            </div>
+                          ) : (
+                            <div className="text-lg font-mono font-bold text-neutral-900 mt-2">{m.contributionPercent}%</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -523,7 +580,8 @@ export default function SharedFund({ user }: SharedFundProps) {
                         } else if (contributionMode === 'equal') {
                           ratio = 1 / memberList.length;
                         } else {
-                          ratio = totalIncome > 0 ? (m.income || 0) / totalIncome : 1 / memberList.length;
+                          const userContrib = (m.income || 0) * (m.contributionPercent / 100);
+                          ratio = parsedSharedTotal > 0 ? userContrib / parsedSharedTotal : 1 / memberList.length;
                         }
                         
                         // Normalize ratio if totalcustom != 100
@@ -675,7 +733,10 @@ export default function SharedFund({ user }: SharedFundProps) {
                            <FundIcon className={`w-6 h-6 ${iconConfig.color}`} />
                          </div>
                          <div className={`px-2.5 py-1 ${iconConfig.bg} rounded-3xl border ${iconConfig.border}`}>
-                           <span className={`text-sm font-bold ${iconConfig.color}`}>{fund.percent}%</span>
+                           <div className={`flex items-center gap-0.5`}>
+                             <input type="number" defaultValue={fund.percent || 0} onBlur={(e) => handleUpdateFundPercent(fund.id, e.target.value)} className={`w-8 text-center bg-transparent outline-none text-sm font-bold ${iconConfig.color}`} />
+                             <span className={`text-sm font-bold ${iconConfig.color}`}>%</span>
+                           </div>
                          </div>
                        </div>
                        

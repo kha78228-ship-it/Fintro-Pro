@@ -3,7 +3,7 @@ import { Goal } from '../types';
 import { db, auth } from '../lib/firebase';
 import { collection, query, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { Target, Plus, Trash2, PiggyBank, Calendar, TrendingUp, Car, Plane, Home, Laptop, Heart, GraduationCap } from 'lucide-react';
+import { Target, Plus, Trash2, PiggyBank, Calendar, TrendingUp, Car, Plane, Home, Laptop, Heart, GraduationCap, Edit3, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, parseISO } from 'date-fns';
 import { useCurrency } from '../lib/CurrencyContext';
@@ -23,6 +23,8 @@ export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newGoal, setNewGoal] = useState({ name: '', targetAmount: '', icon: 'PiggyBank', deadline: '' });
+  const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
+  const [customCurrentAmount, setCustomCurrentAmount] = useState<string>('');
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -70,6 +72,22 @@ export default function Goals() {
       await updateDoc(doc(db, path), {
         currentAmount: goal.currentAmount + amount
       });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
+
+  const handleUpdateCurrentAmount = async (goal: Goal) => {
+    if (!auth.currentUser || !goal.id) return;
+    const path = `users/${auth.currentUser.uid}/goals/${goal.id}`;
+    try {
+      const parsedAmount = parseFloat(customCurrentAmount);
+      if (isNaN(parsedAmount)) return;
+      await updateDoc(doc(db, path), {
+        currentAmount: parsedAmount < 0 ? 0 : parsedAmount
+      });
+      setUpdatingGoalId(null);
+      setCustomCurrentAmount('');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
     }
@@ -220,9 +238,49 @@ export default function Goals() {
                 </div>
               )}
               
-              <div className="flex items-end gap-2 mb-6 mt-2">
-                <span className="text-2xl font-mono font-bold text-neutral-900">{formatMoney(goal.currentAmount)}</span>
-                <span className="text-sm text-neutral-400 font-medium mb-1">/ {formatMoney(goal.targetAmount)}</span>
+              <div className="flex items-end gap-2 mb-6 mt-2 h-[40px]">
+                {updatingGoalId === goal.id ? (
+                  <div className="flex items-center gap-2 w-full">
+                    <input 
+                      type="number"
+                      value={customCurrentAmount}
+                      onChange={(e) => setCustomCurrentAmount(e.target.value)}
+                      className="input-field py-1 px-3 text-sm font-mono w-full"
+                      autoFocus
+                    />
+                    <button 
+                      onClick={() => handleUpdateCurrentAmount(goal)}
+                      className="p-2 bg-neutral-900 text-white rounded-xl hover:bg-neutral-800 transition-colors"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setUpdatingGoalId(null);
+                        setCustomCurrentAmount('');
+                      }}
+                      className="p-2 bg-neutral-100 text-neutral-500 rounded-xl hover:bg-neutral-200 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-2xl font-mono font-bold text-neutral-900 flex items-center gap-2">
+                      {formatMoney(goal.currentAmount)}
+                      <button 
+                        onClick={() => {
+                          setUpdatingGoalId(goal.id || null);
+                          setCustomCurrentAmount(goal.currentAmount.toString());
+                        }}
+                        className="text-neutral-300 hover:text-neutral-900 transition-colors"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </span>
+                    <span className="text-sm text-neutral-400 font-medium mb-1">/ {formatMoney(goal.targetAmount)}</span>
+                  </>
+                )}
               </div>
 
               <div className="space-y-4">

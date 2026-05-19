@@ -562,38 +562,23 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex justify-end">
-      <motion.div 
-        initial={{ opacity: 0 }} 
-        animate={{ opacity: 1 }} 
-        exit={{ opacity: 0 }} 
-        className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm" 
-        onClick={onClose} 
-      />
-      
-      <motion.div 
-        initial={{ x: '100%', opacity: 0 }} 
-        animate={{ x: 0, opacity: 1 }} 
-        exit={{ x: '100%', opacity: 0 }} 
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="w-full max-w-md bg-white h-full relative z-10 flex flex-col shadow-2xl rounded-3xl overflow-hidden"
-      >
-        <div className="p-4 sm:p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50 shrink-0">
-          <div className="flex items-center gap-3">
-            <Users className="w-6 h-6 text-neutral-600" />
-            <h2 className="text-xl font-bold text-neutral-900 font-display">Tương Tác</h2>
-          </div>
-          <button 
-            onClick={onClose}
-            className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors shadow-sm"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="w-full max-w-md mx-auto bg-white min-h-[70vh] relative z-10 flex flex-col shadow-2xl rounded-3xl overflow-hidden border border-neutral-100">
+      <div className="p-4 sm:p-6 border-b border-neutral-100 flex items-center justify-between bg-neutral-50 shrink-0">
+        <div className="flex items-center gap-3">
+          <Users className="w-6 h-6 text-neutral-600" />
+          <h2 className="text-xl font-bold text-neutral-900 font-display">Tương Tác</h2>
         </div>
+        <button 
+          onClick={onClose}
+          className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors shadow-sm"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
-          <AnimatePresence mode="wait">
-            {(selectedFriend || selectedGroupChat) ? (
+      <div className="flex-1 overflow-y-auto overflow-x-hidden relative h-[600px] max-h-[80vh]">
+        <AnimatePresence mode="wait">
+          {(selectedFriend || selectedGroupChat) ? (
               <motion.div 
                 key="chat"
                 initial={{ opacity: 0, x: 20 }}
@@ -1341,8 +1326,6 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
             </motion.div>
           )}
         </AnimatePresence>
-
-      </motion.div>
     </div>
   );
 }

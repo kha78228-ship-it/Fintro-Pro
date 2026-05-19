@@ -11,7 +11,7 @@ interface InteractiveExercise {
   id: number;
   title: string;
   desc: string;
-  icon: JSX.Element;
+  icon: React.ReactNode;
   color: string;
   bg: string;
   content: string[];

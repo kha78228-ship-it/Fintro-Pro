@@ -32,6 +32,7 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
   const [sharedFundId, setSharedFundId] = useState<string | null>(null);
 
   const [showEventForm, setShowEventForm] = useState(false);
@@ -95,15 +96,23 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
                });
              } catch(e) {}
            }
-           const savedEvents = localStorage.getItem('__family_events');
-           if (savedEvents) {
-              try { setEvents(JSON.parse(savedEvents)); } catch(e) {}
+           const { doc, getDoc } = await import('firebase/firestore');
+           const userEventsSnap = await getDoc(doc(db, 'users', user.uid));
+           if (userEventsSnap.exists() && userEventsSnap.data().calendarEvents) {
+              setEvents(userEventsSnap.data().calendarEvents || []);
+           } else {
+              const savedEvents = localStorage.getItem('__family_events');
+              if (savedEvents) {
+                 try { setEvents(JSON.parse(savedEvents)); } catch(e) {}
+              }
            }
         }
         
         setFamilyCycles(cycles);
+        setEventsLoaded(true);
       } catch (error) {
         console.error("Error fetching family cycles/events", error);
+        setEventsLoaded(true);
       }
     };
     fetchCyclesAndEvents();
@@ -111,14 +120,16 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
 
   // Sync events
   useEffect(() => {
-    if (sharedFundId) {
-      import('firebase/firestore').then(({ setDoc, doc }) => {
+    if (!user || !eventsLoaded) return;
+    import('firebase/firestore').then(({ setDoc, doc }) => {
+      if (sharedFundId) {
          setDoc(doc(db, 'couple_data', `calendar_${sharedFundId}`), { events }, { merge: true }).catch(console.error);
-      });
-    } else {
+      } else {
+         setDoc(doc(db, 'users', user.uid), { calendarEvents: events }, { merge: true }).catch(console.error);
+      }
       localStorage.setItem('__family_events', JSON.stringify(events));
-    }
-  }, [events, sharedFundId]);
+    });
+  }, [events, sharedFundId, user, eventsLoaded]);
 
 
   const days = useMemo(() => {
@@ -217,25 +228,35 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
   }, [selectedTransactions]);
 
   const getCycleWarningsForDay = (day: Date) => {
-    const warnings: string[] = [];
+    const warnings: {name: string, type: 'period' | 'ovulation' | 'period_reminder' | 'ovulation_reminder'}[] = [];
     familyCycles.forEach(person => {
       if (!person.cycleData.lastPeriod) return;
       const lastP = parseISO(person.cycleData.lastPeriod);
       const cycleLen = person.cycleData.cycleLength || 28;
       const periodLen = person.cycleData.periodLength || 5;
+      const periodRem = person.cycleData.periodReminderDays || 2;
+      const ovuRem = person.cycleData.ovulationReminderDays || 2;
       
-      const diff = differenceInDays(day, lastP);
+      const ovulationStart = cycleLen - 14 - 2;
+      const ovulationEnd = cycleLen - 14 + 2;
+
+      let diff = differenceInDays(day, lastP);
+      let daysIntoCycle = 0;
       
       if (diff >= 0) {
-        const daysIntoCycle = diff % cycleLen;
-        if (daysIntoCycle < periodLen) {
-          warnings.push(person.name);
-        }
+        daysIntoCycle = diff % cycleLen;
       } else {
-        let daysIntoCycle = (cycleLen - (Math.abs(diff) % cycleLen)) % cycleLen;
-        if (daysIntoCycle < periodLen) {
-          warnings.push(person.name);
-        }
+        daysIntoCycle = (cycleLen - (Math.abs(diff) % cycleLen)) % cycleLen;
+      }
+
+      if (daysIntoCycle < periodLen) {
+        warnings.push({ name: person.name, type: 'period' });
+      } else if (daysIntoCycle >= cycleLen - periodRem) {
+        warnings.push({ name: person.name, type: 'period_reminder' });
+      } else if (daysIntoCycle >= ovulationStart && daysIntoCycle <= ovulationEnd) {
+        warnings.push({ name: person.name, type: 'ovulation' });
+      } else if (daysIntoCycle >= ovulationStart - ovuRem && daysIntoCycle < ovulationStart) {
+        warnings.push({ name: person.name, type: 'ovulation_reminder' });
       }
     });
     return warnings;
@@ -257,13 +278,13 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
 
   const selectedDateWarnings = useMemo(() => {
     if (!selection) return [];
-    const warningsSet = new Set<string>();
+    const warningsMap = new Map<string, {name: string, type: 'period' | 'ovulation' | 'period_reminder' | 'ovulation_reminder'}>();
     const interval = eachDayOfInterval({ start: selection.start, end: selection.end });
     interval.forEach(day => {
       const dayWarnings = getCycleWarningsForDay(day);
-      dayWarnings.forEach(w => warningsSet.add(w));
+      dayWarnings.forEach(w => warningsMap.set(`${w.name}-${w.type}`, w));
     });
-    return Array.from(warningsSet);
+    return Array.from(warningsMap.values());
   }, [selection, familyCycles]);
 
   const handleExportICS = () => {
@@ -419,9 +440,13 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
 
                       {dayWarnings.length > 0 && (
                         <div className="absolute top-2 right-2 flex gap-0.5">
-                          {dayWarnings.map((_, i) => (
-                            <div key={i} className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-3xl bg-orange-500 shadow-sm"></div>
-                          ))}
+                          {dayWarnings.map((w, i) => {
+                            let color = 'bg-orange-500';
+                            if (w.type === 'ovulation') color = 'bg-purple-500';
+                            else if (w.type === 'period_reminder') color = 'bg-orange-300';
+                            else if (w.type === 'ovulation_reminder') color = 'bg-purple-300';
+                            return <div key={i} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-3xl shadow-sm ${color}`}></div>;
+                          })}
                         </div>
                       )}
                       
@@ -543,12 +568,32 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
 
           {selectedDateWarnings.length > 0 && (
             <div className="space-y-2 mb-2">
-              {selectedDateWarnings.map((name, i) => (
-                <div key={i} className="p-3 bg-orange-50 border border-orange-100 text-orange-700 rounded-3xl flex gap-2 items-center">
-                  <Heart className="w-5 h-5 fill-orange-200 text-orange-500 shrink-0" />
-                  <span className="text-sm font-semibold">Tới mùa dâu rụng của {name} 🍓</span>
-                </div>
-              ))}
+              {selectedDateWarnings.map((warning, i) => {
+                let icon = <Heart className="w-5 h-5 fill-orange-200 text-orange-500 shrink-0" />;
+                let text = `Tới mùa dâu rụng của ${warning.name} 🍓`;
+                let bgClass = "bg-orange-50 border-orange-100 text-orange-700";
+
+                if (warning.type === 'ovulation') {
+                  text = `Đang trong cửa sổ rụng trứng của ${warning.name} ✨`;
+                  bgClass = "bg-purple-50 border-purple-100 text-purple-700";
+                  icon = <Heart className="w-5 h-5 fill-purple-200 text-purple-500 shrink-0" />;
+                } else if (warning.type === 'period_reminder') {
+                  text = `Sắp tới mùa dâu rụng của ${warning.name} ⏰`;
+                  bgClass = "bg-orange-50 border-orange-100 text-orange-600";
+                  icon = <Heart className="w-5 h-5 text-orange-400 shrink-0" />;
+                } else if (warning.type === 'ovulation_reminder') {
+                  text = `Sắp tới rụng trứng của ${warning.name} ⏰`;
+                  bgClass = "bg-purple-50 border-purple-100 text-purple-600";
+                  icon = <Heart className="w-5 h-5 text-purple-400 shrink-0" />;
+                }
+
+                return (
+                  <div key={i} className={`p-3 border rounded-3xl flex gap-2 items-center ${bgClass}`}>
+                    {icon}
+                    <span className="text-sm font-semibold">{text}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
           

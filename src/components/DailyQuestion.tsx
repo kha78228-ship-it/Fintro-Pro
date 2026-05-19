@@ -24,7 +24,7 @@ export default function DailyQuestion({ user }: { user: any }) {
       const { generateContent } = await import('../lib/gemini');
       const prompt = `Bạn là hệ thống tâm lý học tình yêu tiên tiến (đóng vai Gemma 4). Hãy phân tích các góc độ cảm xúc sâu sắc và đưa ra 1 câu hỏi thật sáng tạo, khơi gợi chia sẻ sâu sắc hoặc siêu hài hước để cặp đôi hỏi nhau hôm nay. Tránh các câu hỏi quá phổ thông. Chỉ trả về nội dung câu hỏi, không cần giải thích hay nháy kép. Ví dụ: "Nếu chúng ta đổi vai trò cho nhau trong 1 ngày, điều đầu tiên em/anh sẽ làm để trêu chọc đối phương là gì?"`;
       const response = await generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
       });
       if (response.text) {

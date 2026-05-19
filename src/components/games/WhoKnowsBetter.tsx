@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { HeartHandshake, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw } from 'lucide-react';
+import { HeartHandshake, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, Crown } from 'lucide-react';
 
 const QUESTIONS = [
   "Câu trả lời nào đúng nhất về món ăn yêu thích của bạn?",
