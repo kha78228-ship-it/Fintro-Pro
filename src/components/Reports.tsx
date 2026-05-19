@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, memo } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Transaction, TransactionType } from '../types';
@@ -17,7 +17,7 @@ interface ReportsProps {
 
 type ReportView = 'monthly' | 'yearly';
 
-export default function Reports({ transactions, chartPalette = 'default', setChartPalette }: ReportsProps & { setChartPalette?: (c: string) => void }) {
+export default memo(function Reports({ transactions, chartPalette = 'default', setChartPalette }: ReportsProps & { setChartPalette?: (c: string) => void }) {
   const { formatMoney } = useCurrency();
   const [view, setView] = useState<ReportView>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -560,7 +560,7 @@ export default function Reports({ transactions, chartPalette = 'default', setCha
       </AnimatePresence>
     </div>
   );
-}
+});
 
 function maybeSmaller(view: ReportView) {
   return view === 'monthly' ? 8 : 24;

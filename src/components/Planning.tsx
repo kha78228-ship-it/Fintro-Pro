@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import Budgets from './Budgets';
 import Goals from './Goals';
@@ -8,7 +8,7 @@ interface PlanningProps {
   transactions: Transaction[];
 }
 
-export default function Planning({ transactions }: PlanningProps) {
+export default memo(function Planning({ transactions }: PlanningProps) {
   const [activeTab, setActiveTab] = useState<'budgets' | 'goals'>('budgets');
 
   return (
@@ -55,4 +55,4 @@ export default function Planning({ transactions }: PlanningProps) {
       </div>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { Transaction, TransactionType } from '../types';
 import TransactionList from './TransactionList';
 import { ArrowRight, ShieldCheck, Clock, TrendingDown, Target, Wallet, Share2 } from 'lucide-react';
@@ -14,7 +14,7 @@ interface DashboardProps {
   appTheme?: "vintage" | "vietnam";
 }
 
-export default function Dashboard({ transactions, onDeleteTransaction, setCurrentView, appTheme = "vietnam" }: DashboardProps) {
+const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, appTheme = "vietnam" }: DashboardProps) => {
   const { formatMoney } = useCurrency();
   const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
   const weekStart = new Date(new Date().setDate(new Date().getDate() - new Date().getDay()));
@@ -336,4 +336,6 @@ Hãy cùng nhau quản lý tài chính trên Fintro Pro!`;
       </div>
     </div>
   );
-}
+});
+
+export default Dashboard;

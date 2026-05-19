@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from "react";
+import React, { useState, useEffect, Suspense, lazy, useMemo, useCallback } from "react";
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth, db } from "./lib/firebase";
 import {
@@ -94,15 +94,15 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-const ThemeStyles = ({ appTheme, textColor, fontFamily }: { appTheme: 'vintage' | 'vietnam' | 'pink_cute', textColor: string, fontFamily: string }) => {
+const ThemeStyles = ({ appTheme, textColor, accentColor, fontFamily }: { appTheme: 'vintage' | 'vietnam' | 'pink_cute', textColor: string, accentColor: string, fontFamily: string }) => {
   if (appTheme === 'pink_cute') {
     return (
       <style>{`
         :root {
-          --color-neo-bg: #fff0f5 !important; /* lavender blush */
-          --color-neo-dark: #be185d !important; /* pink-700 */
+          --color-neo-bg: #fff0f5 !important;
+          --color-neo-dark: #be185d !important;
           --color-neo-light: #ffffff !important;
-          --color-neo-orange: #f43f5e !important; /* rose-500 */
+          --color-neo-orange: ${accentColor} !important;
           --font-sans: "${fontFamily}", ui-sans-serif, system-ui, sans-serif !important;
         }
         .card {
@@ -136,7 +136,7 @@ const ThemeStyles = ({ appTheme, textColor, fontFamily }: { appTheme: 'vintage' 
           --color-neo-bg: #030914 !important;
           --color-neo-dark: #e0f7fa !important;
           --color-neo-light: rgba(3, 9, 20, 0.7) !important;
-          --color-neo-orange: #ffcc00 !important;
+          --color-neo-orange: ${accentColor} !important;
           --font-sans: "${fontFamily}", ui-sans-serif, system-ui, sans-serif !important;
         }
         .card {
@@ -169,6 +169,7 @@ const ThemeStyles = ({ appTheme, textColor, fontFamily }: { appTheme: 'vintage' 
     <style>{`
       :root {
         --color-neo-dark: ${textColor} !important;
+        --color-neo-orange: ${accentColor} !important;
         --font-sans: "${fontFamily}", ui-sans-serif, system-ui, sans-serif !important;
       }
     `}</style>
@@ -208,6 +209,10 @@ export default function App() {
     "finance",
   );
   const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
+  const closeTransactionForm = useCallback(() => setIsTransactionFormOpen(false), []);
+  const closeFriendsView = useCallback(() => setCurrentView("social_feed"), []);
+  const startCall = useCallback((friendId: string, isVideo = true) => setActiveCall({ friendId, isIncoming: false, isVideo }), []);
+  const closeActiveCall = useCallback(() => setActiveCall(null), []);
   const [chartPalette, setChartPalette] = useState(
     () => localStorage.getItem("__couple_chart_palette") || "default",
   );
@@ -217,6 +222,9 @@ export default function App() {
   const [textColor, setTextColor] = useState(
     () => localStorage.getItem("__couple_color") || "#1a1a1a",
   );
+  const [accentColor, setAccentColor] = useState(
+    () => localStorage.getItem("__couple_accent") || "#f97316",
+  );
   
   const [appTheme, setAppTheme] = useState<"vintage" | "vietnam" | "pink_cute">(
     () => (localStorage.getItem("__couple_theme") as any) || "vietnam",
@@ -225,14 +233,14 @@ export default function App() {
     () => (localStorage.getItem("__couple_graphics") as "high" | "low") || "low"
   );
 
-  const handleUpdateTheme = async (newTheme: "vintage" | "vietnam" | "pink_cute") => {
-    setAppTheme(newTheme);
+  const handleUpdateTheme = useCallback(async (newTheme: "vintage" | "vietnam" | "pink_cute") => {
+    setAppTheme(newTheme as any);
     localStorage.setItem("__couple_theme", newTheme);
     if (user) {
       const { updateDoc, doc } = await import("firebase/firestore");
       await updateDoc(doc(db, "users", user.uid), { appTheme: newTheme });
     }
-  };
+  }, [user]);
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -273,14 +281,16 @@ export default function App() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const filteredTransactions = transactions.filter(
-    (t) =>
-      !searchQuery ||
-      t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.categoryObj?.name || t.category)
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase()),
-  );
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(
+      (t) =>
+        !searchQuery ||
+        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.categoryObj?.name || t.category)
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
+    );
+  }, [transactions, searchQuery]);
 
   const [activeCall, setActiveCall] = useState<{
     friendId: string;
@@ -442,20 +452,25 @@ export default function App() {
     else setCurrentView("social_feed");
   };
 
-  const updateChartPalette = (palette: string) => {
+  const updateChartPalette = useCallback((palette: string) => {
     setChartPalette(palette);
     localStorage.setItem("__couple_chart_palette", palette);
-  };
+  }, []);
 
-  const updateFontFamily = (font: string) => {
+  const updateFontFamily = useCallback((font: string) => {
     setFontFamily(font);
     localStorage.setItem("__couple_font", font);
-  };
+  }, []);
 
-  const updateTextColor = (color: string) => {
+  const updateTextColor = useCallback((color: string) => {
     setTextColor(color);
     localStorage.setItem("__couple_color", color);
-  };
+  }, []);
+
+  const updateAccentColor = useCallback((color: string) => {
+    setAccentColor(color);
+    localStorage.setItem("__couple_accent", color);
+  }, []);
 
   useEffect(() => {
     document.body.setAttribute("data-theme", appTheme);
@@ -878,7 +893,7 @@ export default function App() {
     return () => unsubscribeT();
   }, [user]);
 
-  const handleDeleteTransaction = async (id: string) => {
+  const handleDeleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, `users/${user.uid}/transactions/${id}`));
@@ -889,9 +904,9 @@ export default function App() {
         `users/${user.uid}/transactions/${id}`,
       );
     }
-  };
+  }, [user]);
 
-  const handleDownloadData = () => {
+  const handleDownloadData = useCallback(() => {
     if (transactions.length === 0) return;
 
     const headers = [
@@ -931,9 +946,9 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
+  }, [transactions]);
 
-  const handleDeleteAllData = async () => {
+  const handleDeleteAllData = useCallback(async () => {
     if (!user) return;
     try {
       const txQuery = query(collection(db, `users/${user.uid}/transactions`));
@@ -950,7 +965,7 @@ export default function App() {
         `users/${user.uid}/transactions`,
       );
     }
-  };
+  }, [user]);
 
   if (!hasSeenOnboarding) {
     return (
@@ -1059,7 +1074,7 @@ export default function App() {
   if (!user) {
     return (
       <div data-theme={appTheme} className="min-h-screen flex flex-col font-sans text-neo-dark relative overflow-hidden selection:bg-neo-orange selection:text-white pb-safe">
-        <ThemeStyles appTheme={appTheme} textColor={textColor} fontFamily={fontFamily} />
+        <ThemeStyles appTheme={appTheme} textColor={textColor} accentColor={accentColor} fontFamily={fontFamily} />
         {appTheme === "vietnam" ? (
           <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
         ) : appTheme === "pink_cute" ? (
@@ -1470,7 +1485,7 @@ export default function App() {
 
   return (
     <div data-theme={appTheme} className="min-h-screen pb-24 md:pb-8 flex flex-col font-sans bg-transparent text-neo-dark selection:bg-neo-orange selection:text-white relative">
-      <ThemeStyles appTheme={appTheme} textColor={textColor} fontFamily={fontFamily} />
+      <ThemeStyles appTheme={appTheme} textColor={textColor} accentColor={accentColor} fontFamily={fontFamily} />
       {appTheme === "vietnam" ? (
         <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
       ) : appTheme === "pink_cute" ? (
@@ -1884,10 +1899,8 @@ export default function App() {
             >
               <FriendsView
                 user={user}
-                onClose={() => setCurrentView("social_feed")}
-                onStartCall={(friendId, isVideo = true) =>
-                  setActiveCall({ friendId, isIncoming: false, isVideo })
-                }
+                onClose={closeFriendsView}
+                onStartCall={startCall}
               />
             </motion.div>
           )}
@@ -1905,6 +1918,8 @@ export default function App() {
                 setFontFamily={updateFontFamily}
                 textColor={textColor}
                 setTextColor={updateTextColor}
+                accentColor={accentColor}
+                setAccentColor={updateAccentColor}
                 chartPalette={chartPalette}
                 setChartPalette={updateChartPalette}
                 onDeleteData={handleDeleteAllData}
@@ -2053,8 +2068,8 @@ export default function App() {
         <Suspense fallback={null}>
           <TransactionForm
             isOpen={isTransactionFormOpen}
-            onClose={() => setIsTransactionFormOpen(false)}
-            onSuccess={() => setIsTransactionFormOpen(false)}
+            onClose={closeTransactionForm}
+            onSuccess={closeTransactionForm}
             transactions={transactions}
           />
         </Suspense>
@@ -2110,7 +2125,7 @@ export default function App() {
             friendId={activeCall.friendId}
             isIncoming={activeCall.isIncoming}
             isVideo={activeCall.isVideo}
-            onClose={() => setActiveCall(null)}
+            onClose={closeActiveCall}
           />
         )}
       </AnimatePresence>

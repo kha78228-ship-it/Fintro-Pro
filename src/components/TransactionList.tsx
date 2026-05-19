@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { Transaction, TransactionType, TransactionStatus } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
 import * as LucideIcons from 'lucide-react';
@@ -17,7 +17,106 @@ interface TransactionListProps {
 type SortField = 'date' | 'amount' | 'category';
 type SortDirection = 'asc' | 'desc';
 
-export default function TransactionList({ transactions, onDelete, hideHeaderActions }: TransactionListProps) {
+const TransactionItem = memo(({ 
+  t, 
+  idx, 
+  onDeleteRequest,
+  formatMoney 
+}: { 
+  t: Transaction; 
+  idx: number; 
+  onDeleteRequest?: (id: string) => void;
+  formatMoney: (v: number) => string;
+}) => {
+  const categoryObj = DEFAULT_CATEGORIES.find(c => c.id === t.category);
+  const IconComponent = (LucideIcons as any)[categoryObj?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
+
+  return (
+    <motion.div 
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ delay: idx * 0.05 }}
+      className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60 shadow-sm hover:shadow-md cursor-pointer"
+    >
+      <div className="flex items-start sm:items-center gap-3">
+        <div className={`w-11 h-11 rounded-full flex flex-col items-center justify-center transition-colors shrink-0 ${
+          t.type === TransactionType.INCOME ? 'bg-neutral-50/50 text-neutral-600' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
+        }`}>
+          <IconComponent className="w-5 h-5" />
+        </div>
+        <div className="flex flex-col">
+          <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5">{t.description || categoryObj?.name}</div>
+          <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 font-medium">
+            <span className="font-mono tracking-tight text-neutral-500">{format(parseISO(t.date), 'HH:mm')}</span>
+            <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+            <span className="truncate">{categoryObj?.name}</span>
+            <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+            <span className={`px-1.5 py-0.5 rounded-3xl ${t.status === TransactionStatus.COMPLETED ? 'bg-neutral-100 text-neutral-700' : 'bg-orange-100 text-orange-700'}`}>
+              {t.status === TransactionStatus.COMPLETED ? 'Đã hoàn thành' : 'Chờ xử lý'}
+            </span>
+            {t.isRecurring && t.recurringPeriod && t.recurringPeriod !== 'none' && (
+               <>
+                 <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+                 <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-3xl bg-neutral-50 text-neutral-600">
+                   <LucideIcons.Repeat className="w-2.5 h-2.5" />
+                   {t.recurringPeriod === 'daily' ? 'Hàng ngày' : t.recurringPeriod === 'weekly' ? 'Hàng tuần' : t.recurringPeriod === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
+                 </span>
+               </>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-end mt-1 sm:mt-0 pl-14 sm:pl-0 gap-3">
+        <div className={`text-base font-bold font-mono tracking-tight text-right ${
+          t.type === TransactionType.INCOME ? 'text-neutral-600' : 'text-orange-500'
+        }`}>
+          {t.type === TransactionType.INCOME ? '+' : '-'}{formatMoney(t.amount)}
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const catName = categoryObj?.name || 'Khác';
+            const sign = t.type === TransactionType.INCOME ? '+' : '-';
+            const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${formatMoney(t.amount)}\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
+            
+            if (navigator.share) {
+              navigator.share({
+                title: 'Chi tiết giao dịch',
+                text: text,
+              }).catch(console.error);
+            } else {
+              navigator.clipboard.writeText(text).then(() => {
+                alert('Đã sao chép vào clipboard!');
+              }).catch(console.error);
+            }
+          }}
+          className="p-1.5 text-neutral-400 hover:text-neutral-500 hover:bg-neutral-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100"
+          title="Chia sẻ"
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+        {onDeleteRequest && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteRequest(t.id);
+            }}
+            className="p-1.5 text-neutral-400 hover:text-orange-500 hover:bg-orange-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+            title="Xóa giao dịch"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+
+export default memo(function TransactionList({ transactions, onDelete, hideHeaderActions }: TransactionListProps) {
   const { formatMoney } = useCurrency();
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -152,96 +251,6 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
 
     return groups;
   }, [paginatedTransactions, sortField, dailyTotals]);
-
-  const renderTransaction = (t: Transaction, idx: number) => {
-    const categoryObj = DEFAULT_CATEGORIES.find(c => c.id === t.category);
-    const IconComponent = (LucideIcons as any)[categoryObj?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
-
-    return (
-      <motion.div 
-        layout
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-        transition={{ delay: idx * 0.05 }}
-        key={t.id} 
-        className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60 shadow-sm hover:shadow-md cursor-pointer"
-      >
-        <div className="flex items-start sm:items-center gap-3">
-          <div className={`w-11 h-11 rounded-full flex flex-col items-center justify-center transition-colors shrink-0 ${
-            t.type === TransactionType.INCOME ? 'bg-neutral-50/50 text-neutral-600' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
-          }`}>
-            <IconComponent className="w-5 h-5" />
-          </div>
-          <div className="flex flex-col">
-            <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5">{t.description || categoryObj?.name}</div>
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 font-medium">
-              <span className="font-mono tracking-tight text-neutral-500">{format(parseISO(t.date), 'HH:mm')}</span>
-              <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
-              <span className="truncate">{categoryObj?.name}</span>
-              <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
-              <span className={`px-1.5 py-0.5 rounded-3xl ${t.status === TransactionStatus.COMPLETED ? 'bg-neutral-100 text-neutral-700' : 'bg-orange-100 text-orange-700'}`}>
-                {t.status === TransactionStatus.COMPLETED ? 'Đã hoàn thành' : 'Chờ xử lý'}
-              </span>
-              {t.isRecurring && t.recurringPeriod && t.recurringPeriod !== 'none' && (
-                 <>
-                   <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
-                   <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-3xl bg-neutral-50 text-neutral-600">
-                     <LucideIcons.Repeat className="w-2.5 h-2.5" />
-                     {t.recurringPeriod === 'daily' ? 'Hàng ngày' : t.recurringPeriod === 'weekly' ? 'Hàng tuần' : t.recurringPeriod === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
-                   </span>
-                 </>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-end mt-1 sm:mt-0 pl-14 sm:pl-0 gap-3">
-          <div className={`text-base font-bold font-mono tracking-tight text-right ${
-            t.type === TransactionType.INCOME ? 'text-neutral-600' : 'text-orange-500'
-          }`}>
-            {t.type === TransactionType.INCOME ? '+' : '-'}{formatMoney(t.amount)}
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              const catName = categoryObj?.name || 'Khác';
-              const sign = t.type === TransactionType.INCOME ? '+' : '-';
-              const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${formatMoney(t.amount)}\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
-              
-              if (navigator.share) {
-                navigator.share({
-                  title: 'Chi tiết giao dịch',
-                  text: text,
-                }).catch(console.error);
-              } else {
-                navigator.clipboard.writeText(text).then(() => {
-                  alert('Đã sao chép vào clipboard!');
-                }).catch(console.error);
-              }
-            }}
-            className="p-1.5 text-neutral-400 hover:text-neutral-500 hover:bg-neutral-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100"
-            title="Chia sẻ"
-          >
-            <Share2 className="w-4 h-4" />
-          </button>
-          {onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmDeleteId(t.id);
-              }}
-              className="p-1.5 text-neutral-400 hover:text-orange-500 hover:bg-orange-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-              title="Xóa giao dịch"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </motion.div>
-    );
-  };
 
   return (
     <div className="card p-8">
@@ -434,13 +443,29 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
                        </div>
                     </div>
                     <div className="space-y-1">
-                      {group.items.map((t, idx) => renderTransaction(t, idx))}
+                      {group.items.map((t, idx) => (
+                        <TransactionItem 
+                            key={t.id} 
+                            t={t} 
+                            idx={idx} 
+                            onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
+                            formatMoney={formatMoney} 
+                        />
+                      ))}
                     </div>
                   </motion.div>
                 ))
               ) : (
                 <div className="space-y-1">
-                  {paginatedTransactions.map((t, idx) => renderTransaction(t, idx))}
+                  {paginatedTransactions.map((t, idx) => (
+                    <TransactionItem 
+                        key={t.id} 
+                        t={t} 
+                        idx={idx} 
+                        onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
+                        formatMoney={formatMoney} 
+                    />
+                  ))}
                 </div>
               )}
               {totalPages > 1 && (
@@ -464,4 +489,4 @@ export default function TransactionList({ transactions, onDelete, hideHeaderActi
       </AnimatePresence>
     </div>
   );
-}
+});

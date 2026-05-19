@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import { Transaction, TransactionType } from '../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addDays, subDays, isToday, startOfWeek, endOfWeek, differenceInDays, parseISO, startOfDay, endOfDay, subYears, addYears, eachMonthOfInterval, startOfYear, endOfYear, isSameYear } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -23,7 +23,7 @@ interface CalendarViewProps {
   user?: User | null;
 }
 
-export default function CalendarView({ transactions, onDelete, user }: CalendarViewProps) {
+const CalendarView = memo(({ transactions, onDelete, user }: CalendarViewProps) => {
   const { formatMoney } = useCurrency();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'year' | 'week'>('month');
@@ -760,4 +760,6 @@ export default function CalendarView({ transactions, onDelete, user }: CalendarV
       </div>
     </div>
   );
-}
+});
+
+export default CalendarView;

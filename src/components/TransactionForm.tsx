@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import { X, Plus, Minus, Calendar, Tag, FileText, Check, Mic, Loader2, Sparkles, Image as ImageIcon, Send, Clock, Repeat } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TransactionType, Transaction, TransactionStatus } from '../types';
@@ -17,7 +17,7 @@ interface TransactionFormProps {
   inline?: boolean;
 }
 
-export default function TransactionForm({ isOpen, onClose, inline, onSuccess, transactions }: TransactionFormProps) {
+export default memo(function TransactionForm({ isOpen, onClose, inline, onSuccess, transactions }: TransactionFormProps) {
   const { currencySymbol } = useCurrency();
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [amount, setAmount] = useState('');
@@ -634,4 +634,4 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
       )}
     </AnimatePresence>
   );
-}
+});

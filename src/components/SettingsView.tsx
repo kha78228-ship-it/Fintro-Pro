@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Settings as SettingsIcon, Image as ImageIcon, Layout, Type, Palette, AlertTriangle, Download, MonitorDown, Smartphone, UserCircle, Shield, KeySquare, Copy, Check, Trash2, Bell, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateProfile, User, signOut } from 'firebase/auth';
@@ -16,6 +16,8 @@ interface SettingsProps {
   setFontFamily: (font: string) => void;
   textColor: string;
   setTextColor: (color: string) => void;
+  accentColor?: string;
+  setAccentColor?: (color: string) => void;
   onDeleteData: () => void;
   onDownloadData: () => void;
   appTheme?: "vintage" | "vietnam" | "pink_cute";
@@ -36,7 +38,7 @@ const COLORS = [
   { id: '#5a67d8', label: 'Xanh Neon', bg: 'bg-[#5a67d8]' },
 ];
 
-export default function SettingsView({ 
+export default memo(function SettingsView({ 
   user,
   chartPalette,
   setChartPalette,
@@ -44,6 +46,8 @@ export default function SettingsView({
   setFontFamily,
   textColor,
   setTextColor,
+  accentColor,
+  setAccentColor,
   onDeleteData,
   onDownloadData,
   appTheme,
@@ -433,44 +437,6 @@ export default function SettingsView({
                   </div>
                </div>
             </div>
-
-            {isAdmin && (
-               <div className="card p-8 space-y-6 max-w-2xl">
-                  <div className="flex justify-between items-center mb-6 border-b border-orange-100 pb-4">
-                     <div className="flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-orange-500" />
-                        <h3 className="text-lg font-bold text-neutral-900">Quản trị viên (Mã mời)</h3>
-                     </div>
-                     <div className="flex gap-2">
-                       <button onClick={generateAnonymousCode} className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tạo Mã Ẩn Danh (3 số)</button>
-                       <button onClick={generateInviteCode} className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tạo Mã Tham Gia (6 chữ)</button>
-                       <button onClick={migrateFriendCodes} className="bg-orange-100 hover:bg-orange-200 text-orange-900 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Đồng bộ ID</button>
-                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                     {inviteCodes.map(code => {
-                        const createdAt = code.createdAt?.toDate ? code.createdAt.toDate().getTime() : code.createdAt ? new Date(code.createdAt).getTime() : 0;
-                        const timeLeft = 3600000 - (now - createdAt);
-                        const timeLeftStr = timeLeft > 0 ? `${Math.floor(timeLeft / 60000)}:${Math.floor((timeLeft % 60000) / 1000).toString().padStart(2, '0')}` : 'Hết hạn';
-                        const maxUses = code.type === 'anonymous' ? (code.createdBy === 'kha78228@gmail.com' ? 1 : 2) : 10;
-                        const usage = code.uses || 0;
-                        
-                        return (
-                         <div key={code.id} className="bg-white border border-orange-200 rounded-3xl p-4 flex flex-col justify-between">
-                            <div className="text-2xl font-mono tracking-widest font-bold text-neutral-900 text-center mb-2">{code.id}</div>
-                            <div className="text-xs text-center text-neutral-600 mb-2">Lượt: {usage}/{maxUses}</div>
-                            <div className={`text-xs text-center font-bold mb-2 ${timeLeft > 0 ? 'text-neutral-600' : 'text-orange-600'}`}>Hết hạn trong: {timeLeftStr}</div>
-                            <button onClick={(e) => { const target = e.currentTarget; target.innerText = 'Đã chép!'; navigator.clipboard.writeText(code.id); setTimeout(() => { target.innerText = 'Copy'; }, 2000); }} className="w-full bg-neutral-50 hover:bg-neutral-100 text-xs font-bold text-neutral-600 py-2 rounded-3xl mb-2 cursor-pointer transition-colors text-center border border-neutral-200">Copy</button>
-                            <button onClick={() => deleteInviteCode(code.id)} className="w-full text-xs font-semibold text-orange-500 hover:text-orange-600 flex justify-center items-center gap-1">
-                               <AlertTriangle className="w-3 h-3" /> Thu hồi
-                            </button>
-                         </div>
-                        );
-                     })}
-                     {inviteCodes.length === 0 && <p className="text-sm text-neutral-500 col-span-full">Chưa có mã mời nào.</p>}
-                  </div>
-               </div>
-            )}
          </motion.div>
       )}
 
@@ -545,6 +511,31 @@ export default function SettingsView({
                     ))}
                   </div>
                 </div>
+
+                {setAccentColor && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-neo-dark/60 uppercase tracking-widest mb-3">Màu nổi bật (Accent Color)</p>
+                    <div className="flex flex-wrap gap-4">
+                      {[
+                        { id: '#f97316', label: 'Cam (Mặc định)' },
+                        { id: '#10b981', label: 'Xanh Lá' },
+                        { id: '#3b82f6', label: 'Xanh Dương' },
+                        { id: '#ec4899', label: 'Hồng' },
+                        { id: '#a855f7', label: 'Tím' },
+                      ].map(color => (
+                        <button
+                          key={color.id}
+                          onClick={() => setAccentColor(color.id)}
+                          className={`w-12 h-12 bg-neutral-100 rounded-full border-2 transition-all flex items-center justify-center shadow-none ${accentColor === color.id ? 'border-neo-dark shadow-[4px_4px_0_var(--color-neo-dark)]' : 'border-neo-dark hover:scale-105'}`}
+                          title={color.label}
+                          style={{ backgroundColor: color.id }}
+                        >
+                          {accentColor === color.id && <Check className="w-6 h-6 text-white mix-blend-difference" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <p className="text-xs font-bold text-neo-dark/60 uppercase tracking-widest mb-3">Đơn Vị Tiền Tệ</p>
@@ -740,6 +731,44 @@ export default function SettingsView({
                <>
             {isAdmin && (
                <div className="card p-8 space-y-6 max-w-2xl mt-8">
+                  <div className="flex justify-between items-center mb-6 border-b border-orange-100 pb-4">
+                     <div className="flex items-center gap-3">
+                        <Shield className="w-5 h-5 text-orange-500" />
+                        <h3 className="text-lg font-bold text-neutral-900">Quản trị viên (Mã mời)</h3>
+                     </div>
+                     <div className="flex gap-2">
+                       <button onClick={generateAnonymousCode} className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tạo Mã Ẩn Danh (3 số)</button>
+                       <button onClick={generateInviteCode} className="bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Tạo Mã Tham Gia (6 chữ)</button>
+                       <button onClick={migrateFriendCodes} className="bg-orange-100 hover:bg-orange-200 text-orange-900 font-bold px-4 py-2 rounded-3xl text-sm transition-colors">Đồng bộ ID</button>
+                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                     {inviteCodes.map(code => {
+                        const createdAt = code.createdAt?.toDate ? code.createdAt.toDate().getTime() : code.createdAt ? new Date(code.createdAt).getTime() : 0;
+                        const timeLeft = 3600000 - (now - createdAt);
+                        const timeLeftStr = timeLeft > 0 ? `${Math.floor(timeLeft / 60000)}:${Math.floor((timeLeft % 60000) / 1000).toString().padStart(2, '0')}` : 'Hết hạn';
+                        const maxUses = code.type === 'anonymous' ? (code.createdBy === 'kha78228@gmail.com' ? 1 : 2) : 10;
+                        const usage = code.uses || 0;
+                        
+                        return (
+                         <div key={code.id} className="bg-white border border-orange-200 rounded-3xl p-4 flex flex-col justify-between">
+                            <div className="text-2xl font-mono tracking-widest font-bold text-neutral-900 text-center mb-2">{code.id}</div>
+                            <div className="text-xs text-center text-neutral-600 mb-2">Lượt: {usage}/{maxUses}</div>
+                            <div className={`text-xs text-center font-bold mb-2 ${timeLeft > 0 ? 'text-neutral-600' : 'text-orange-600'}`}>Hết hạn trong: {timeLeftStr}</div>
+                            <button onClick={(e) => { const target = e.currentTarget; target.innerText = 'Đã chép!'; navigator.clipboard.writeText(code.id); setTimeout(() => { target.innerText = 'Copy'; }, 2000); }} className="w-full bg-neutral-50 hover:bg-neutral-100 text-xs font-bold text-neutral-600 py-2 rounded-3xl mb-2 cursor-pointer transition-colors text-center border border-neutral-200">Copy</button>
+                            <button onClick={() => deleteInviteCode(code.id)} className="w-full text-xs font-semibold text-orange-500 hover:text-orange-600 flex justify-center items-center gap-1">
+                               <AlertTriangle className="w-3 h-3" /> Thu hồi
+                            </button>
+                         </div>
+                        );
+                     })}
+                     {inviteCodes.length === 0 && <p className="text-sm text-neutral-500 col-span-full">Chưa có mã mời nào.</p>}
+                  </div>
+               </div>
+            )}
+            
+            {isAdmin && (
+               <div className="card p-8 space-y-6 max-w-2xl mt-8">
                   <div className="flex justify-between items-center mb-6 border-b border-neutral-100 pb-4">
                      <div className="flex items-center gap-3">
                         <Bell className="w-5 h-5 text-neutral-500" />
@@ -911,4 +940,4 @@ export default function SettingsView({
       </AnimatePresence>
     </div>
   );
-}
+});
