@@ -109,6 +109,31 @@
   .micro-label {
     @apply text-[10px] font-bold text-neo-dark uppercase tracking-widest;
   }
+  
+  .markdown-body ul {
+    @apply list-disc list-inside space-y-1 my-2;
+  }
+  .markdown-body ol {
+    @apply list-decimal list-inside space-y-1 my-2;
+  }
+  .markdown-body p {
+    @apply mb-2 last:mb-0;
+  }
+  .markdown-body strong {
+    @apply font-bold;
+  }
+  .markdown-body em {
+    @apply italic;
+  }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    @apply font-bold mt-4 mb-2;
+  }
+  .markdown-body h1 { @apply text-2xl; }
+  .markdown-body h2 { @apply text-xl; }
+  .markdown-body h3 { @apply text-lg; }
+  .markdown-body blockquote {
+    @apply border-l-4 border-neutral-200 pl-4 py-1 italic text-neutral-500 my-4;
+  }
 }
 
 /* Force override of rounded corners to match Neo aesthetic where classes might bypass theme */

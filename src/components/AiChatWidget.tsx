@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Sparkles, Loader2, BrainCircuit, Trash2, Bot, Ghost, Settings, RefreshCw, Palette, Wallet, Heart } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { Transaction } from '../types';
+import { Transaction, Debt, Subscription } from '../types';
 import { useCurrency } from '../lib/CurrencyContext';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface AiAvatarConfig {
   type: 'icon' | 'generated';
@@ -17,6 +19,9 @@ const PREDEFINED_ICONS = [
   { id: 'BrainCircuit', icon: BrainCircuit },
   { id: 'MessageSquare', icon: MessageSquare }
 ];
+
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   id: string;
@@ -42,6 +47,8 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [activeMode, setActiveMode] = useState<ChatMode>(appMode || 'finance');
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [messagesData, setMessagesData] = useState<Record<ChatMode, Message[]>>({
     finance: [],
     love: [],
@@ -77,6 +84,29 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
     const IconObj = PREDEFINED_ICONS.find(i => i.id === avatarConfig.value)?.icon || Sparkles;
     return <IconObj className={className} />;
   };
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const debtsRef = collection(db, `users/${user.uid}/debts`);
+    const subsRef = collection(db, `users/${user.uid}/subscriptions`);
+
+    const unsubDebts = onSnapshot(debtsRef, (snap) => {
+      const d: Debt[] = [];
+      snap.forEach(doc => d.push({ id: doc.id, ...doc.data() } as Debt));
+      setDebts(d);
+    });
+
+    const unsubSubs = onSnapshot(subsRef, (snap) => {
+      const s: Subscription[] = [];
+      snap.forEach(doc => s.push({ id: doc.id, ...doc.data() } as Subscription));
+      setSubscriptions(s);
+    });
+
+    return () => {
+      unsubDebts();
+      unsubSubs();
+    };
+  }, [user?.uid]);
 
   // Load chat history from localStorage on mount
   useEffect(() => {
@@ -192,14 +222,31 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
 
       const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
       const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-
-      const prompt = `Bạn là hệ thống trí tuệ nhân tạo đặc biệt, là sự kết hợp hoàn hảo giữa năng lực phân tích xuất sắc của tư duy logic "Gemini 2.5 Pro" và sự thấu cảm, tinh tế tâm lý của "Gemma4". Tên của bạn là "Fintro AI".
       
-      Thông tin người dùng:
-      - Chuyên môn hiện tại của bạn: ${targetMode === 'finance' ? 'Tư vấn tài chính cá nhân và gia đình' : targetMode === 'love' ? 'Tư vấn tình cảm, tâm lý học, mối quan hệ' : 'Gợi ý giải trí, thư giãn, vui vẻ'}
+      const debtSummary = debts.map(d => `- ${d.title}: ${formatMoney(d.amount)} (${d.type === 'owe' ? 'Tôi nợ' : 'Họ nợ tôi'}, ${d.status === 'completed' ? 'Đã xong' : 'Chưa xong'})`).join('\n');
+      const subSummary = subscriptions.map(s => `- ${s.name}: ${formatMoney(s.amount)}/${s.billingCycle === 'monthly' ? 'tháng' : 'năm'} (Hạn: ${s.nextBillingDate})`).join('\n');
+
+      const systemPrompts = {
+        finance: `Bạn là "Fintro AI" - Chuyên gia cố vấn tài chính cá nhân thông thái và tinh tế. 
+        Nhiệm vụ: Giúp người dùng quản lý tiền bạc, phân tích chi tiêu, và đưa ra lời khuyên tiết kiệm.
+        Dữ liệu hiện tại:
+        - Thu nhập: ${formatMoney(totalIncome)}
+        - Chi tiêu: ${formatMoney(totalExpense)}
+        - Vay nợ: \n${debtSummary || 'Không có dữ liệu nợ'}
+        - Đăng ký dịch vụ: \n${subSummary || 'Không có dữ liệu đăng ký'}`,
+        
+        love: `Bạn là "Valentine AI" - Chuyên gia tư vấn tâm lý và mối quan hệ.
+        Nhiệm vụ: Lắng nghe, thấu hiểu và đưa ra lời khuyên chân thành về tình yêu, sự kết nối và quà tặng.
+        Phong cách: Ấm áp, lãng mạn nhưng thực tế.`,
+        
+        entertainment: `Bạn là "Joy AI" - Người bạn đồng hành giải trí vui nhộn.
+        Nhiệm vụ: Kể chuyện cười, gợi ý phim/nhạc, lên kế hoạch đi chơi hoặc đơn giản là tán gẫu vui vẻ.`
+      };
+
+      const prompt = `${systemPrompts[targetMode]}
+      
+      Thông tin bối cảnh:
       - Đơn vị tiền tệ: ${currency} (${currencySymbol})
-      - Tổng thu nhập đã ghi nhận: ${formatMoney(totalIncome)}
-      - Tổng chi tiêu đã ghi nhận: ${formatMoney(totalExpense)}
       - Số lượng giao dịch: ${transactions.length}
       
       Lịch sử trò chuyện gần nhất:
@@ -207,15 +254,14 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
       
       Người dùng nói: "${cleanInput}"
       
-      Hướng dẫn TRẢ LỜI NGHIÊM NGẶT:
-      - Trả lời TRỰC TIẾP theo ĐÚNG CHUYÊN MÔN HIỆN TẠI (Tài chính, Tình cảm hoặc Giải trí).
-      - Câu trả lời phải súc tích, RẤT DỄ ĐỌC (dùng đoạn ngắn, bullet point nếu cần).
-      - Ngôn ngữ: TIẾNG VIỆT, ấm áp thấu cảm, dùng các emoji phổ biến nhẹ nhàng. 
-      - Tuyệt đối không xưng là AI một cách máy móc, hãy trò chuyện tự nhiên như một người bạn thực thụ.`;
+      Hướng dẫn TRẢ LỜI:
+      - Trả lời TRỰC TIẾP, chân thực, không máy móc.
+      - Nếu là tài chính, hãy dùng dữ liệu nợ/đăng ký nếu liên quan.
+      - Ngôn ngữ: TIẾNG VIỆT. Trình bày đẹp mắt bằng Markdown (đậm, nghiêng, list).`;
 
       const { generateContent } = await import('../lib/gemini');
       const response = await generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: prompt,
       });
 
@@ -386,6 +432,23 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
             {/* Messages */}
             <div className="flex-1 p-5 overflow-y-auto space-y-5 bg-neutral-50/50 scrollbars-hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <AnimatePresence initial={false}>
+                {currentMessages.length > 0 && (
+                   <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                     {activeMode === 'finance' && (
+                       <>
+                         <button onClick={() => setInput("Phân tích nợ của mình")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Phân tích nợ</button>
+                         <button onClick={() => setInput("Dịch vụ nào sắp hết hạn?")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Gia hạn dịch vụ</button>
+                         <button onClick={() => setInput("Gợi ý tiết kiệm tháng này")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Mẹo tiết kiệm</button>
+                       </>
+                     )}
+                     {activeMode === 'love' && (
+                       <>
+                         <button onClick={() => setInput("Gợi ý quà tặng lãng mạn")} className="px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-2xl text-[11px] font-bold text-orange-600 hover:bg-orange-100 shrink-0 shadow-sm">Gợi ý quà</button>
+                         <button onClick={() => setInput("Làm sao để làm hòa?")} className="px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-2xl text-[11px] font-bold text-orange-600 hover:bg-orange-100 shrink-0 shadow-sm">Làm hòa</button>
+                       </>
+                     )}
+                   </div>
+                )}
                 {currentMessages.map((msg) => (
                   <motion.div 
                     key={msg.id} 
@@ -407,7 +470,15 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
                             : 'bg-white text-neutral-800 shadow-sm border border-neutral-100'
                         }`}
                       >
-                        {msg.content}
+                        {msg.role === 'user' ? (
+                          msg.content
+                        ) : (
+                          <div className="markdown-body">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                       <div className={`text-[10px] text-neutral-400 flex items-center gap-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start ml-1'}`}>
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

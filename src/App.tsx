@@ -1,4 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy, useMemo, useCallback } from "react";
+// @ts-ignore
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { auth, db } from "./lib/firebase";
 import {
@@ -47,16 +49,16 @@ const AIAvatar = lazy(() => import("./components/AIAvatar"));
 const VideoCall = lazy(() => import("./components/VideoCall"));
 
 const SocialFeed = lazy(() => import("./components/SocialFeed"));
-import { VietnamBackground } from "./components/VietnamBackground";
-import { VintageBackground } from "./components/VintageBackground";
-import { VietnamLoadingScreen } from "./components/VietnamLoadingScreen";
-import { VintageLoadingScreen } from "./components/VintageLoadingScreen";
-import { PinkCuteBackground } from "./components/PinkCuteBackground";
-import { PinkCuteLoadingScreen } from "./components/PinkCuteLoadingScreen";
-import { HeritageDisplay } from "./components/HeritageDisplay";
-import { DongSonDrumHUD } from "./components/DongSonDrumHUD";
-import { VietnamLoginForm } from "./components/VietnamLoginForm";
-import { VintageLoginForm } from "./components/VintageLoginForm";
+const VietnamBackground = lazy(() => import("./components/VietnamBackground").then(m => ({ default: m.VietnamBackground })));
+const VintageBackground = lazy(() => import("./components/VintageBackground").then(m => ({ default: m.VintageBackground })));
+const VietnamLoadingScreen = lazy(() => import("./components/VietnamLoadingScreen").then(m => ({ default: m.VietnamLoadingScreen })));
+const VintageLoadingScreen = lazy(() => import("./components/VintageLoadingScreen").then(m => ({ default: m.VintageLoadingScreen })));
+const PinkCuteBackground = lazy(() => import("./components/PinkCuteBackground").then(m => ({ default: m.PinkCuteBackground })));
+const PinkCuteLoadingScreen = lazy(() => import("./components/PinkCuteLoadingScreen").then(m => ({ default: m.PinkCuteLoadingScreen })));
+const DongSonDrumHUD = lazy(() => import("./components/DongSonDrumHUD").then(m => ({ default: m.DongSonDrumHUD })));
+const VietnamLoginForm = lazy(() => import("./components/VietnamLoginForm").then(m => ({ default: m.VietnamLoginForm })));
+const VintageLoginForm = lazy(() => import("./components/VintageLoginForm").then(m => ({ default: m.VintageLoginForm })));
+import { LoadingSpinner } from "./components/LoadingSpinner";
 
 import {
   Heart,
@@ -199,6 +201,18 @@ type View =
   | "friends";
 
 export default function App() {
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      console.log('SW Registered: ', r);
+    },
+    onRegisterError(error) {
+      console.error('SW registration error', error);
+    },
+  });
+
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [introTab, setIntroTab] = useState(0);
@@ -232,6 +246,8 @@ export default function App() {
   const [graphicsQuality, setGraphicsQuality] = useState<"high" | "low">(
     () => (localStorage.getItem("__couple_graphics") as "high" | "low") || "low"
   );
+
+  const reducedMotion = useMemo(() => graphicsQuality === "low", [graphicsQuality]);
 
   const handleUpdateTheme = useCallback(async (newTheme: "vintage" | "vietnam" | "pink_cute") => {
     setAppTheme(newTheme as any);
@@ -280,6 +296,7 @@ export default function App() {
   }, []);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isFetchingData, setIsFetchingData] = useState(true);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(
@@ -864,8 +881,11 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setTransactions([]);
+      setIsFetchingData(false);
       return;
     }
+
+    setIsFetchingData(true);
 
     const q = query(
       collection(db, `users/${user.uid}/transactions`),
@@ -880,8 +900,10 @@ export default function App() {
           txs.push({ id: doc.id, ...doc.data() } as Transaction);
         });
         setTransactions(txs);
+        setIsFetchingData(false);
       },
       (error) => {
+        setIsFetchingData(false);
         handleFirestoreError(
           error,
           OperationType.LIST,
@@ -980,32 +1002,18 @@ export default function App() {
     );
   }
 
-  if (!isOnline) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center space-y-6">
-        <div className="w-24 h-24 bg-orange-50 rounded-full flex items-center justify-center">
-          <WifiOff className="w-10 h-10 text-orange-500" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-neutral-900">
-            Không có kết nối mạng
-          </h2>
-          <p className="text-neutral-500 max-w-sm mx-auto">
-            Fintro là ứng dụng đám mây và yêu cầu kết nối mạng để đồng bộ dữ
-            liệu theo thời gian thực.
-          </p>
-        </div>
-        <p className="text-sm font-medium text-neutral-400 bg-neutral-50 px-4 py-2 rounded-3xl">
-          Vui lòng kiểm tra lại kết nối Wifi hoặc 4G/5G
-        </p>
-      </div>
-    );
-  }
-
   if (loading || (user && isCheckingProfile)) {
-    if (appTheme === 'pink_cute') return <PinkCuteLoadingScreen appMode={appMode} />;
-    if (appTheme === 'vintage') return <VintageLoadingScreen appMode={appMode} />;
-    return <VietnamLoadingScreen appMode={appMode} graphicsQuality={graphicsQuality} />;
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        {appTheme === 'pink_cute' ? (
+          <PinkCuteLoadingScreen appMode={appMode} />
+        ) : appTheme === 'vintage' ? (
+          <VintageLoadingScreen appMode={appMode} />
+        ) : (
+          <VietnamLoadingScreen appMode={appMode} graphicsQuality={graphicsQuality} />
+        )}
+      </Suspense>
+    );
   }
 
   if (user && !profileVerified) {
@@ -1075,13 +1083,15 @@ export default function App() {
     return (
       <div data-theme={appTheme} className="min-h-screen flex flex-col font-sans text-neo-dark relative overflow-hidden selection:bg-neo-orange selection:text-white pb-safe">
         <ThemeStyles appTheme={appTheme} textColor={textColor} accentColor={accentColor} fontFamily={fontFamily} />
-        {appTheme === "vietnam" ? (
-          <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
-        ) : appTheme === "pink_cute" ? (
-          <PinkCuteBackground appMode={appMode} />
-        ) : (
-          <VintageBackground appMode={appMode} />
-        )}
+        <Suspense fallback={<div className="fixed inset-0 bg-neutral-900" />}>
+          {appTheme === "vietnam" ? (
+            <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
+          ) : appTheme === "pink_cute" ? (
+            <PinkCuteBackground appMode={appMode} />
+          ) : (
+            <VintageBackground appMode={appMode} />
+          )}
+        </Suspense>
 
         {/* Top bar */}
         <header className="relative flex items-center justify-between px-6 py-4 md:px-12 md:py-8 z-20">
@@ -1243,12 +1253,14 @@ export default function App() {
                       <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase text-neo-dark absolute left-0 bg-transparent z-10 px-4 border-r border-neo-dark">
                         Hệ Thống
                       </span>
-                      <marquee
-                        className="text-xs font-bold tracking-widest text-neo-orange ml-24"
-                        scrollamount="5"
-                      >
-                        {systemAnnouncement.text}
-                      </marquee>
+                      {React.createElement(
+                        "marquee",
+                        {
+                          className: "text-xs font-bold tracking-widest text-neo-orange ml-24",
+                          scrollamount: "5"
+                        } as any,
+                        systemAnnouncement.text
+                      )}
                     </div>
                   )}
                 <div className="pt-8 w-full">
@@ -1257,46 +1269,48 @@ export default function App() {
                   </p>
 
                   <div className="grid grid-cols-1 gap-6">
-                    {appTheme === "vietnam" ? (
-                      <VietnamLoginForm
-                        isLoggingIn={isLoggingIn}
-                        inviteCode={inviteCode}
-                        setInviteCode={setInviteCode}
-                        handleConnectSpace={handleConnectSpace}
-                        inviteError={inviteError}
-                        graphicsQuality={graphicsQuality}
-                        onGoogleSignIn={async () => {
-                          setIsLoggingIn(true);
-                          try {
-                            const { signInWithGoogle } = await import("./lib/firebase");
-                            await signInWithGoogle();
-                          } catch (err) {
-                            console.error(err);
-                          } finally {
-                            setIsLoggingIn(false);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <VintageLoginForm
-                        isLoggingIn={isLoggingIn}
-                        inviteCode={inviteCode}
-                        setInviteCode={setInviteCode}
-                        handleConnectSpace={handleConnectSpace}
-                        inviteError={inviteError}
-                        onGoogleSignIn={async () => {
-                          setIsLoggingIn(true);
-                          try {
-                            const { signInWithGoogle } = await import("./lib/firebase");
-                            await signInWithGoogle();
-                          } catch (err) {
-                            console.error(err);
-                          } finally {
-                            setIsLoggingIn(false);
-                          }
-                        }}
-                      />
-                    )}
+                    <Suspense fallback={<div className="h-44 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-neo-orange" /></div>}>
+                      {appTheme === "vietnam" ? (
+                        <VietnamLoginForm
+                          isLoggingIn={isLoggingIn}
+                          inviteCode={inviteCode}
+                          setInviteCode={setInviteCode}
+                          handleConnectSpace={handleConnectSpace}
+                          inviteError={inviteError}
+                          graphicsQuality={graphicsQuality}
+                          onGoogleSignIn={async () => {
+                            setIsLoggingIn(true);
+                            try {
+                              const { signInWithGoogle } = await import("./lib/firebase");
+                              await signInWithGoogle();
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setIsLoggingIn(false);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <VintageLoginForm
+                          isLoggingIn={isLoggingIn}
+                          inviteCode={inviteCode}
+                          setInviteCode={setInviteCode}
+                          handleConnectSpace={handleConnectSpace}
+                          inviteError={inviteError}
+                          onGoogleSignIn={async () => {
+                            setIsLoggingIn(true);
+                            try {
+                              const { signInWithGoogle } = await import("./lib/firebase");
+                              await signInWithGoogle();
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setIsLoggingIn(false);
+                            }
+                          }}
+                        />
+                      )}
+                    </Suspense>
                   </div>
                 </div>
               </div>
@@ -1486,13 +1500,59 @@ export default function App() {
   return (
     <div data-theme={appTheme} className="min-h-screen pb-24 md:pb-8 flex flex-col font-sans bg-transparent text-neo-dark selection:bg-neo-orange selection:text-white relative">
       <ThemeStyles appTheme={appTheme} textColor={textColor} accentColor={accentColor} fontFamily={fontFamily} />
-      {appTheme === "vietnam" ? (
-        <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
-      ) : appTheme === "pink_cute" ? (
-        <PinkCuteBackground appMode={appMode} />
-      ) : (
-        <VintageBackground appMode={appMode} />
+      <Suspense fallback={null}>
+        {appTheme === "vietnam" ? (
+          <VietnamBackground appMode={appMode} graphicsQuality={graphicsQuality} />
+        ) : appTheme === "pink_cute" ? (
+          <PinkCuteBackground appMode={appMode} />
+        ) : (
+          <VintageBackground appMode={appMode} />
+        )}
+      </Suspense>
+
+      {/* Offline Status Top Alert */}
+      {!isOnline && (
+        <div className="bg-[#fb923c] text-neutral-950 font-bold tracking-widest text-center py-2.5 px-4 shadow-md uppercase sticky top-0 z-[1001] flex items-center justify-center gap-2 text-[10px] border-b border-neo-dark">
+          <WifiOff className="w-4 h-4 animate-pulse" />
+          <span>Bạn đang ngoại tuyến • Hệ thống đã tự động kích hoạt Cơ Sở Dữ Liệu Ngoại Tuyến (Offline Persistence Mode)</span>
+        </div>
       )}
+
+      {/* PWA Update Ready Toast */}
+      <AnimatePresence>
+        {needRefresh && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 md:bottom-6 right-4 left-4 md:left-auto md:right-6 z-[1000] bg-neutral-950 border border-neutral-800 text-white rounded-3xl p-5 shadow-2xl md:max-w-sm flex flex-col gap-3.5"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-emerald-400 animate-pulse" strokeWidth={2} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-sm tracking-wide text-white">BẢN CẬP NHẬT MỚI! 🎉</h4>
+                <p className="text-xs text-neutral-400 leading-relaxed">Fintro đã sẵn sàng phiên bản mới mượt mà hơn. Hãy cập nhật ngay để áp dụng!</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2.5 pl-13">
+              <button
+                onClick={() => setNeedRefresh(false)}
+                className="text-xs font-bold text-neutral-400 hover:text-white px-3.5 py-2 rounded-xl transition-colors"
+              >
+                Để sau
+              </button>
+              <button
+                onClick={() => updateServiceWorker(true)}
+                className="text-xs font-bold text-neutral-900 bg-emerald-400 hover:bg-emerald-300 px-4.5 py-2 rounded-xl transition-colors hover:shadow-lg shadow-emerald-400/20"
+              >
+                Cập nhật ngay ✨
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Decorative vertical lines for Neo layout */}
       <div className="fixed inset-0 pointer-events-none z-0 max-w-[1600px] mx-auto border-x border-neo-dark/10 shadow-md" />
@@ -1680,14 +1740,23 @@ export default function App() {
       <main
         className={`flex-1 w-full px-4 md:px-8 py-10 md:py-16 relative z-10 pb-32 ${appMode === "finance" ? "max-w-[1600px] mx-auto" : "max-w-[1600px] mx-auto md:pl-32"}`}
       >
-        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><Loader2 className="w-12 h-12 text-neo-orange animate-spin" /></div>}>
+        <Suspense fallback={<LoadingSpinner />}>
           <AnimatePresence mode="wait">
-            {currentView === "dashboard" && (
+            {isFetchingData ? (
+              <motion.div
+                key="loading_data"
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
+              >
+                <LoadingSpinner />
+              </motion.div>
+            ) : currentView === "dashboard" && (
             <motion.div
               key="dashboard"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <Dashboard
                 transactions={filteredTransactions}
@@ -1700,42 +1769,43 @@ export default function App() {
           {currentView === "history" && (
             <motion.div
               key="history"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <TransactionList
                 transactions={filteredTransactions}
                 onDelete={handleDeleteTransaction}
+                reducedMotion={reducedMotion}
               />
             </motion.div>
           )}
           {currentView === "calendar" && (
             <motion.div
               key="calendar"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
-              <CalendarView transactions={filteredTransactions} />
+              <CalendarView transactions={filteredTransactions} reducedMotion={reducedMotion} user={user} />
             </motion.div>
           )}
           {currentView === "planning" && (
             <motion.div
               key="planning"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
-              <Planning transactions={filteredTransactions} />
+              <Planning transactions={filteredTransactions} reducedMotion={reducedMotion} appTheme={appTheme} />
             </motion.div>
           )}
           {currentView === "shared_fund" && user && (
             <motion.div
               key="shared_fund"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <SharedFund user={user} />
             </motion.div>
@@ -1743,9 +1813,9 @@ export default function App() {
           {currentView === "reports" && (
             <motion.div
               key="reports"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <Reports
                 transactions={filteredTransactions}
@@ -1757,9 +1827,9 @@ export default function App() {
           {currentView === "tools" && (
             <motion.div
               key="tools"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <Tools setCurrentView={setCurrentView} appMode={appMode} />
             </motion.div>
@@ -1768,9 +1838,9 @@ export default function App() {
           {currentView === "love_home" && (
             <motion.div
               key="love_home"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <LoveGames user={user} />
             </motion.div>
@@ -1779,9 +1849,9 @@ export default function App() {
           {currentView === "love_memory" && (
             <motion.div
               key="love_memory"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <LoveMemory user={user} />
             </motion.div>
@@ -1790,9 +1860,9 @@ export default function App() {
           {currentView === "couple_games" && appMode !== "love" && (
             <motion.div
               key="couple_games"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <CoupleGames user={user} />
             </motion.div>
@@ -1801,9 +1871,9 @@ export default function App() {
           {currentView === "exercises" && (
             <motion.div
               key="exercises"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <RelationshipExercises />
             </motion.div>
@@ -1812,9 +1882,9 @@ export default function App() {
           {currentView === "discovery" && (
             <motion.div
               key="discovery"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <DiscoveryDeck />
             </motion.div>
@@ -1823,9 +1893,9 @@ export default function App() {
           {currentView === "dates" && (
             <motion.div
               key="dates"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <DateIdeas user={user} />
             </motion.div>
@@ -1834,9 +1904,9 @@ export default function App() {
           {currentView === "forget_me_nots" && (
             <motion.div
               key="forget_me_nots"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <ForgetMeNots user={user} />
             </motion.div>
@@ -1845,9 +1915,9 @@ export default function App() {
           {currentView === "cycle" && (
             <motion.div
               key="cycle"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <CycleTracker user={user} />
             </motion.div>
@@ -1856,9 +1926,9 @@ export default function App() {
           {currentView === "photo_album" && (
             <motion.div
               key="photo_album"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <Suspense fallback={<div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-neo-orange" /></div>}>
                 <PhotoAlbum appTheme={appTheme} />
@@ -1869,9 +1939,9 @@ export default function App() {
           {currentView === "social_feed" && (
             <motion.div
               key="social_feed"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <SocialFeed user={user} userProfile={userProfile} />
             </motion.div>
@@ -1880,12 +1950,12 @@ export default function App() {
           {currentView === "notifications" && (
             <motion.div
               key="notifications"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <Suspense fallback={<div className="h-40 flex justify-center items-center">Đang tải...</div>}>
-                <NotificationCenter onNavigate={setCurrentView} />
+                <NotificationCenter onNavigate={(v) => setCurrentView(v as View)} />
               </Suspense>
             </motion.div>
           )}
@@ -1893,9 +1963,9 @@ export default function App() {
           {currentView === "friends" && user && (
             <motion.div
               key="friends"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <FriendsView
                 user={user}
@@ -1908,9 +1978,9 @@ export default function App() {
           {currentView === "settings" && (
             <motion.div
               key="settings"
-              initial={{ opacity: 0, y: 10 }}
+              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             >
               <SettingsView
                 user={user}
@@ -2209,7 +2279,7 @@ function TopNavLink({
   );
 }
 
-function BottomNavLink({
+const BottomNavLink = React.memo(({
   active,
   onClick,
   icon,
@@ -2221,7 +2291,7 @@ function BottomNavLink({
   icon: React.ReactNode;
   label: string;
   color?: string;
-}) {
+}) => {
   return (
     <button
       onClick={onClick}
@@ -2241,9 +2311,9 @@ function BottomNavLink({
       </span>
     </button>
   );
-}
+});
 
-function NavButton({
+const NavButton = React.memo(({
   active,
   onClick,
   icon,
@@ -2257,7 +2327,7 @@ function NavButton({
   label: string;
   color: string;
   layout?: "horizontal" | "vertical" | "auto";
-}) {
+}) => {
   const indicatorHorizontalClass =
     "absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full";
   const indicatorVerticalClass =
@@ -2308,4 +2378,4 @@ function NavButton({
       )}
     </button>
   );
-}
+});

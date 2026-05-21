@@ -35,7 +35,7 @@ export default function SharedFund({ user }: SharedFundProps) {
   const { formatMoney } = useCurrency();
   const [sharedFundDoc, setSharedFundDoc] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [members, setMembers] = useState<Record<string, { role: string, income: number, displayName: string }>>({});
+  const [members, setMembers] = useState<Record<string, { role: string, income: number, displayName: string, customRatio?: number }>>({});
   const [funds, setFunds] = useState<Fund[]>([]);
   const [myIncomeSync, setMyIncomeSync] = useState<string>('');
   const [contributionMode, setContributionMode] = useState<'income' | 'equal' | 'custom'>('income');

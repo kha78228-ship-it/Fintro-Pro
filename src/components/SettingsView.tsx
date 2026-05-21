@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import { Settings as SettingsIcon, Image as ImageIcon, Layout, Type, Palette, AlertTriangle, Download, MonitorDown, Smartphone, UserCircle, Shield, KeySquare, Copy, Check, Trash2, Bell, DollarSign } from 'lucide-react';
+import { Settings as SettingsIcon, Image as ImageIcon, Layout, Type, Palette, AlertTriangle, Download, MonitorDown, Smartphone, UserCircle, Shield, KeySquare, Copy, Check, Trash2, Bell, DollarSign, Wifi, WifiOff, Database, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateProfile, User, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -57,6 +57,18 @@ export default memo(function SettingsView({
   const [activeTab, setActiveTab] = useState('account');
   const [customInput, setCustomInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  useEffect(() => {
+     const handleOnline = () => setIsOnline(true);
+     const handleOffline = () => setIsOnline(false);
+     window.addEventListener('online', handleOnline);
+     window.addEventListener('offline', handleOffline);
+     return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+     };
+  }, []);
   
   // Account settings
   const [displayName, setDisplayName] = useState('');
@@ -628,59 +640,147 @@ export default memo(function SettingsView({
                </div>
             </div>
             
-            <div className="pt-6 border-t border-neutral-100">
-              <h4 className="font-bold text-neutral-900 mb-4 flex items-center justify-between">
-                Cài đặt App Độc Lập
-                <span className="text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-3xl uppercase tracking-wider">Cloud App</span>
-              </h4>
-              
-              <div className="bg-neo-bg border border-neutral-100/50 rounded-3xl p-6 mb-4 relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-12 h-12 bg-neutral-100 rounded-full blur-2xl pointer-events-none" />
-                <div className="flex items-start gap-4 mb-4 relative z-10">
-                  <div className="w-10 h-10 rounded-full shadow-sm border border-neutral-50 flex items-center justify-center shrink-0">
-                    <Smartphone className="w-7 h-7 text-neutral-600" />
+            <div className="pt-6 border-t border-neutral-100 space-y-6">
+              <div>
+                <h4 className="font-bold text-neutral-900 mb-4 flex items-center justify-between">
+                  Khả năng Ngoại Tuyến & Trạng Thái PWA
+                  <span className="text-[10px] font-bold bg-[#10b981]/15 text-[#10b981] px-2.5 py-1 rounded-3xl uppercase tracking-wider">Hỗ Trợ Offline</span>
+                </h4>
+
+                {/* Connection Diagnostics State */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 font-sans">
+                  <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200/50 space-y-2">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Trạng thái kết nối</span>
+                    <div className="flex items-center gap-2">
+                      {isOnline ? (
+                        <>
+                          <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-bounce" />
+                          <span className="font-bold text-sm text-neutral-800">Trực Tuyến (Online)</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-ping" />
+                          <span className="font-bold text-sm text-neutral-800">Ngoại Tuyến (Offline Mode)</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-neutral-500 leading-snug">
+                      {isOnline 
+                        ? "Ứng dụng đang đồng bộ dữ liệu thời gian thực tích hợp tức thời với đám mây." 
+                        : "Hệ thống tự chuyển sang CSDL nội bộ. Mọi ghi chép sẽ tự đồng bộ khi có mạng."
+                      }
+                    </p>
                   </div>
-                  <div>
-                    <h5 className="font-bold text-neutral-950 text-lg leading-tight">Fintro App</h5>
-                    <p className="text-xs font-semibold text-neutral-600 mt-1 uppercase tracking-wider">iOS • Android • macOS • Windows</p>
-                  </div>
-                </div>
-                
-                <div className="space-y-3 mb-6 relative z-10">
-                  <div className="flex items-start gap-3 text-sm text-neutral-900/80">
-                    <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><Check className="w-3 h-3" /></div>
-                    <p className="leading-snug">Hoạt động như một ứng dụng độc lập trên thiết bị của bạn.</p>
-                  </div>
-                  <div className="flex items-start gap-3 text-sm text-neutral-900/80">
-                    <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><AlertTriangle className="w-3 h-3" /></div>
-                    <p className="leading-snug"><strong>Yêu cầu có mạng:</strong> Bạn cần kết nối Internet (Wifi/4G) để sử dụng.</p>
+
+                  <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200/50 space-y-2">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Cơ sở dữ liệu offline</span>
+                    <div className="flex items-center gap-1.5 text-neutral-800 font-bold text-sm">
+                      <Database className="w-4 h-4 text-neutral-500" />
+                      <span>Sẵn Sàng (IndexedDB Cached)</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-500 leading-snug">
+                      Dữ liệu tài chính & nhật ký được đệm an toàn vào bộ nhớ nội bộ của trình duyệt trình duyệt.
+                    </p>
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => {
-                    if (window.self !== window.top) {
-                      alert('⚠️ Bạn đang dùng bản xem trước, vui lòng nhấn "Open in new tab" ở góc trên bên phải để bắt đầu tải app.');
-                      return;
-                    }
-                    // @ts-ignore
-                    const promptEvent = window.deferredPrompt;
-                    if (promptEvent) {
-                      promptEvent.prompt();
-                      promptEvent.userChoice.then((choiceResult: any) => {
-                        console.log(choiceResult.outcome);
-                        // @ts-ignore
-                        window.deferredPrompt = null;
-                      });
-                    } else {
-                        alert('Để tải ứng dụng:\n\n• Trên Safari (iOS): Nhấn nút Chia Sẻ (vuông có mũi tên lên) ở dưới cùng màn hình -> Chọn "Thêm vào MH chính" (Add to Home Screen).\n\n• Trên Chrome (Android): Nhấn nút Menu (3 chấm) ở góc phải -> Chọn "Thêm vào Màn hình chính" hoặc "Cài đặt ứng dụng".');
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-neutral-600 hover:bg-neutral-700 text-white font-bold rounded-3xl shadow-lg shadow-neutral-600/30 transition-all relative z-10 active:scale-95"
-                >
-                  <Download className="w-5 h-5 shrink-0" />
-                  Cài Đặt Lên Màn Hình Chính
-                </button>
+                {/* Performance Tuning Actions */}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <button 
+                    onClick={() => {
+                      if ('caches' in window) {
+                        caches.keys().then(names => {
+                          for (let name of names) {
+                            caches.delete(name);
+                          }
+                        });
+                      }
+                      alert("Đã xóa toàn bộ bộ nhớ cache tài nguyên. Ứng dụng sẽ tự động tải lại.");
+                      window.location.reload();
+                    }}
+                    className="flex items-center justify-center gap-2 py-3 px-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 hover:text-neutral-900 border border-neutral-200 text-xs font-bold rounded-2xl transition-all cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Xóa Cache Ứng Dụng
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(regs => {
+                          if (regs.length === 0) {
+                            alert("Đã kích hoạt làm mới, ứng dụng đang chạy ở bản mới nhất.");
+                          } else {
+                            regs.forEach(reg => reg.update());
+                            alert("Đã gửi tín hiệu kiểm tra cập nhật service worker của Fintro.");
+                          }
+                        });
+                      } else {
+                        alert("Nhận diện: Trình duyệt không hỗ trợ Service Worker.");
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 py-3 px-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 hover:text-neutral-900 border border-neutral-200 text-xs font-bold rounded-2xl transition-all cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Kiểm Tra Bản Cập Nhật
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-neutral-900 mb-4 flex items-center justify-between">
+                  Cài đặt App Độc Lập
+                  <span className="text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-3xl uppercase tracking-wider">Cloud App</span>
+                </h4>
+                
+                <div className="bg-neo-bg border border-neutral-100/50 rounded-3xl p-6 mb-4 relative overflow-hidden">
+                  <div className="absolute -right-6 -top-6 w-12 h-12 bg-neutral-100 rounded-full blur-2xl pointer-events-none" />
+                  <div className="flex items-start gap-4 mb-4 relative z-10">
+                    <div className="w-10 h-10 rounded-full shadow-sm border border-neutral-50 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-7 h-7 text-neutral-600" />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-neutral-950 text-lg leading-tight">Fintro App</h5>
+                      <p className="text-xs font-semibold text-neutral-600 mt-1 uppercase tracking-wider">iOS • Android • macOS • Windows</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 mb-6 relative z-10 text-neutral-800 font-sans">
+                    <div className="flex items-start gap-3 text-sm text-neutral-900/80">
+                      <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><Check className="w-3 h-3" /></div>
+                      <p className="leading-snug">Hoạt động như một ứng dụng cài đặt mượt mà trên thiết bị không thông qua cửa hàng ứng dụng.</p>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm text-neutral-900/80">
+                      <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><Check className="w-3 h-3" /></div>
+                      <p className="leading-snug"><strong>Khả năng offline vượt trội:</strong> Nhờ công nghệ PWA & CSDL offline, bạn có thể xem lại dữ liệu tài chính cũ và thêm mới giao dịch bình thường khi mất mạng.</p>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      if (window.self !== window.top) {
+                        alert('⚠️ Bạn đang dùng bản xem trước, vui lòng nhấn "Open in new tab" ở góc trên bên phải để bắt đầu tải app.');
+                        return;
+                      }
+                      // @ts-ignore
+                      const promptEvent = window.deferredPrompt;
+                      if (promptEvent) {
+                        promptEvent.prompt();
+                        promptEvent.userChoice.then((choiceResult: any) => {
+                          console.log(choiceResult.outcome);
+                          // @ts-ignore
+                          window.deferredPrompt = null;
+                        });
+                      } else {
+                          alert('Để tải ứng dụng:\n\n• Trên Safari (iOS): Nhấn nút Chia Sẻ (vuông có mũi tên lên) ở dưới cùng màn hình -> Chọn "Thêm vào MH chính" (Add to Home Screen).\n\n• Trên Chrome (Android): Nhấn nút Menu (3 chấm) ở góc phải -> Chọn "Thêm vào Màn hình chính" hoặc "Cài đặt ứng dụng".');
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-3xl shadow-lg transition-all relative z-10 active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-5 h-5 shrink-0" />
+                    Cài Đặt Lên Màn Hình Chính (PWA)
+                  </button>
+                </div>
               </div>
             </div>
 

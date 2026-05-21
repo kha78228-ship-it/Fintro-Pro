@@ -597,7 +597,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                   </button>
                   {selectedFriend ? (
                     <>
-                      <AIAvatar uid={selectedFriend.friendId} name={selectedFriend.displayName} photoURL={selectedFriend.photoURL || friendStatuses[selectedFriend.friendId]?.photoURL} className="w-8 h-8 rounded-full border border-neutral-100 ml-2 object-cover bg-neutral-200" />
+                      <AIAvatar uid={selectedFriend.friendId} name={selectedFriend.displayName} photoURL={selectedFriend.photoURL} className="w-8 h-8 rounded-full border border-neutral-100 ml-2 object-cover bg-neutral-200" />
                       <div className="flex-1">
                         <h3 className="font-bold text-neutral-800 text-sm leading-none">{selectedFriend.displayName || 'Bạn bè'}</h3>
                         <span className={`text-[10px] font-semibold ${friendStatuses[selectedFriend.friendId] === 'online' ? 'text-neutral-500' : 'text-neutral-400'}`}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Budget } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
 import { db, auth } from '../lib/firebase';
@@ -10,9 +10,10 @@ import { useCurrency } from '../lib/CurrencyContext';
 
 interface BudgetsProps {
   transactions: any[];
+  reducedMotion?: boolean;
 }
 
-export default function Budgets({ transactions }: BudgetsProps) {
+export default function Budgets({ transactions, reducedMotion }: BudgetsProps) {
   const { formatMoney } = useCurrency();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -33,6 +34,19 @@ export default function Budgets({ transactions }: BudgetsProps) {
 
     return () => unsubscribe();
   }, []);
+
+  const spentByCategory = useMemo(() => {
+    const currentMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const totals: Record<string, number> = {};
+    
+    transactions.forEach(t => {
+      if (t.type === 'expense' && new Date(t.date) >= currentMonthStart) {
+        totals[t.category] = (totals[t.category] || 0) + t.amount;
+      }
+    });
+    
+    return totals;
+  }, [transactions]);
 
   const handleAddBudget = async () => {
     if (!auth.currentUser) return;
@@ -79,9 +93,9 @@ export default function Budgets({ transactions }: BudgetsProps) {
 
       {isAdding && (
         <motion.div 
-          initial={{ opacity: 0, height: 0, y: -20 }}
+          initial={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0, y: -20 }}
           animate={{ opacity: 1, height: 'auto', y: 0 }}
-          exit={{ opacity: 0, height: 0, y: -20 }}
+          exit={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0, y: -20 }}
           className="bg-white p-6 md:p-8 rounded-3xl shadow-xl shadow-neutral-900/5 border border-neutral-200 space-y-8 relative overflow-hidden"
         >
           <div className="flex justify-between items-center">
@@ -156,22 +170,18 @@ export default function Budgets({ transactions }: BudgetsProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {budgets.map((budget, idx) => {
             const category = DEFAULT_CATEGORIES.find(c => c.id === budget.categoryId);
-            // Get all transactions for current month only
-            const currentMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-            const spent = transactions
-              .filter(t => t.category === budget.categoryId && t.type === 'expense' && new Date(t.date) >= currentMonthStart)
-              .reduce((sum, t) => sum + t.amount, 0);
+            const spent = spentByCategory[budget.categoryId] || 0;
             const percent = Math.min((spent / budget.amount) * 100, 100);
             const remaining = Math.max(budget.amount - spent, 0);
             const isOver = spent >= budget.amount;
 
             return (
               <motion.div 
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
+                layout={!reducedMotion}
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: idx * 0.05 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
+                transition={reducedMotion ? { duration: 0.2 } : { delay: idx * 0.05 }}
                 key={budget.id} 
                 className={`p-6 rounded-3xl bg-white shadow-sm border transition-shadow hover:shadow-md relative overflow-hidden ${isOver ? 'border-orange-200 bg-orange-50/30' : 'border-neutral-100'}`}
               >

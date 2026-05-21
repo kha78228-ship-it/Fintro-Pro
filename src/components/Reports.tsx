@@ -1,6 +1,4 @@
 import React, { useMemo, useState, useRef, memo } from 'react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { Transaction, TransactionType } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -9,6 +7,7 @@ import { vi } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { FileText, Calendar as CalendarIcon, TrendingUp, TrendingDown, LayoutGrid, Download, Share2 } from 'lucide-react';
 import { useCurrency } from '../lib/CurrencyContext';
+import FinancialAdvisor from './FinancialAdvisor';
 
 interface ReportsProps {
   transactions: Transaction[];
@@ -35,6 +34,13 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
     if (!reportRef.current) return;
     try {
       setIsExporting(true);
+      const [html2canvasModule, jspdfModule] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf')
+      ]);
+      const html2canvas = html2canvasModule.default;
+      const { jsPDF } = jspdfModule;
+
       const canvas = await html2canvas(reportRef.current, {
         scale: 2, // Higher quality
         useCORS: true,
@@ -211,9 +217,15 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
 
   const currentData = view === 'monthly' ? monthlyData : yearlyData;
 
-  const totalIncome = currentData.reduce((acc, curr) => acc + curr.income, 0);
-  const totalExpense = currentData.reduce((acc, curr) => acc + curr.expense, 0);
-  const totalSavings = totalIncome - totalExpense;
+  const { totalIncome, totalExpense, totalSavings } = useMemo(() => {
+    const income = currentData.reduce((acc, curr) => acc + curr.income, 0);
+    const expense = currentData.reduce((acc, curr) => acc + curr.expense, 0);
+    return {
+      totalIncome: income,
+      totalExpense: expense,
+      totalSavings: income - expense
+    };
+  }, [currentData]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -366,7 +378,7 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
             <div className="h-80 w-full mb-4">
               <ResponsiveContainer width="100%" height="100%">
             {overviewChartType === 'bar' ? (
-              <BarChart data={currentData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={currentData as any} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="#F5F5F5" />
                   <XAxis 
                     dataKey={view === 'monthly' ? 'monthName' : 'year'} 
@@ -385,7 +397,7 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
                   <Bar dataKey="savings" fill={paletteColors.savings} radius={[4, 4, 0, 0]} barSize={maybeSmaller(view)} />
                 </BarChart>
             ) : (
-                <AreaChart data={currentData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <AreaChart data={currentData as any} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="#F5F5F5" />
                   <XAxis 
                     dataKey={view === 'monthly' ? 'monthName' : 'year'} 
@@ -556,6 +568,7 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
             </div>
           </div>
 
+          <FinancialAdvisor transactions={transactions} />
         </motion.div>
       </AnimatePresence>
     </div>

@@ -12,6 +12,7 @@ interface TransactionListProps {
   transactions: Transaction[];
   onDelete?: (id: string) => void;
   hideHeaderActions?: boolean;
+  reducedMotion?: boolean;
 }
 
 type SortField = 'date' | 'amount' | 'category';
@@ -21,25 +22,27 @@ const TransactionItem = memo(({
   t, 
   idx, 
   onDeleteRequest,
-  formatMoney 
+  formatMoney,
+  reducedMotion
 }: { 
   t: Transaction; 
   idx: number; 
   onDeleteRequest?: (id: string) => void;
   formatMoney: (v: number) => string;
+  reducedMotion?: boolean;
 }) => {
   const categoryObj = DEFAULT_CATEGORIES.find(c => c.id === t.category);
   const IconComponent = (LucideIcons as any)[categoryObj?.icon || 'HelpCircle'] || LucideIcons.HelpCircle;
 
   return (
     <motion.div 
-      layout
-      initial={{ opacity: 0, y: 10 }}
+      layout={!reducedMotion}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      transition={{ delay: idx * 0.05 }}
+      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
+      whileHover={reducedMotion ? {} : { scale: 1.01 }}
+      whileTap={reducedMotion ? {} : { scale: 0.99 }}
+      transition={reducedMotion ? { duration: 0.2 } : { delay: idx * 0.05 }}
       className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60 shadow-sm hover:shadow-md cursor-pointer"
     >
       <div className="flex items-start sm:items-center gap-3">
@@ -116,7 +119,7 @@ const TransactionItem = memo(({
   );
 });
 
-export default memo(function TransactionList({ transactions, onDelete, hideHeaderActions }: TransactionListProps) {
+export default memo(function TransactionList({ transactions, onDelete, hideHeaderActions, reducedMotion }: TransactionListProps) {
   const { formatMoney } = useCurrency();
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -450,6 +453,7 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
                             idx={idx} 
                             onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
                             formatMoney={formatMoney} 
+                            reducedMotion={reducedMotion}
                         />
                       ))}
                     </div>
@@ -464,6 +468,7 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
                         idx={idx} 
                         onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
                         formatMoney={formatMoney} 
+                        reducedMotion={reducedMotion}
                     />
                   ))}
                 </div>

@@ -144,7 +144,19 @@ service cloud.firestore {
         && incoming().userId == existing().userId;
       allow delete: if isOwner(userId);
     }
-    
+
+    // User Debts
+    match /users/{userId}/debts/{debtId} {
+      allow list, get: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    // User Subscriptions
+    match /users/{userId}/subscriptions/{subId} {
+      allow list, get: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
+    }
+
     function isValidForgetMeNot(data) {
       return data.keys().hasAll(['title', 'value', 'iconType'])
         && data.title is string && data.title.size() > 0 && data.title.size() <= 100
@@ -299,6 +311,11 @@ service cloud.firestore {
       // E.g. pairId = [uid1, uid2].sort() -> dataId starts with that pairId.
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isValidId(dataId);
+
+      // Support subcollections under couple_data (e.g. date_ideas, diaries, goals)
+      match /{subCollection}/{documentId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     function isValidPost(data) {

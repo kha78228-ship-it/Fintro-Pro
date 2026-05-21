@@ -132,6 +132,133 @@ async function startServer() {
     }
   });
 
+  // API route to subscribe to calendar (returns ICS file)
+  app.get("/api/calendar/subscribe", async (req, res) => {
+    try {
+      const { fundId, userId } = req.query;
+      
+      if (!fundId && !userId) {
+        return res.status(400).send("Bad Request: Please provide fundId or userId query parameter.");
+      }
+
+      // Read firebase-applet-config.json dynamically to tolerate both relative paths and CWD-based runs
+      let projectId = "gen-lang-client-0286609642";
+      let databaseId = "ai-studio-4c1babd3-a9ea-45c1-bbfe-ffa32ef30023";
+
+      try {
+        const fs = await import("fs");
+        const path = await import("path");
+        const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+          if (config.projectId) projectId = config.projectId;
+          if (config.firestoreDatabaseId) databaseId = config.firestoreDatabaseId;
+        }
+      } catch (e) {
+        console.error("Error reading firebase config in server", e);
+      }
+
+      let events: any[] = [];
+      const fetchUrl = fundId 
+        ? `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/couple_data/calendar_${fundId}`
+        : `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/users/${userId}`;
+
+      console.log(`Subscribing calendar - Fetching: ${fetchUrl}`);
+      const response = await fetch(fetchUrl);
+      
+      if (response.ok) {
+        const docJson: any = await response.json();
+        
+        // Helper function to unpack Firestore typed JSON REST format
+        const unpackValue = (val: any): any => {
+          if (!val) return null;
+          if ('stringValue' in val) return val.stringValue;
+          if ('booleanValue' in val) return val.booleanValue;
+          if ('integerValue' in val) return parseInt(val.integerValue, 10);
+          if ('doubleValue' in val) return val.doubleValue;
+          if ('arrayValue' in val) {
+            return (val.arrayValue.values || []).map((v: any) => unpackValue(v));
+          }
+          if ('mapValue' in val) {
+            const fields = val.mapValue.fields || {};
+            const resVal: Record<string, any> = {};
+            for (const k of Object.keys(fields)) {
+              resVal[k] = unpackValue(fields[k]);
+            }
+            return resVal;
+          }
+          return null;
+        };
+
+        const data: Record<string, any> = {};
+        if (docJson && docJson.fields) {
+          for (const k of Object.keys(docJson.fields)) {
+            data[k] = unpackValue(docJson.fields[k]);
+          }
+        }
+
+        events = fundId ? (data.events || []) : (data.calendarEvents || []);
+      }
+
+      // Generate ICS Content
+      let icsContent = "BEGIN:VCALENDAR\n" +
+                       "VERSION:2.0\n" +
+                       "PRODID:-//Fintro Pro//Shared Calendar//EN\n" +
+                       "CALSCALE:GREGORIAN\n" +
+                       "METHOD:PUBLISH\n" +
+                       "X-WR-CALNAME:Lich Gia Dinh - Fintro AI\n" +
+                       "X-WR-TIMEZONE:Asia/Ho_Chi_Minh\n";
+
+      events.forEach((e: any) => {
+        const id = e.id || Math.random().toString(36).substring(2);
+        const title = (e.title || "Su kien gia dinh").replace(/[\r\n]/g, " ");
+        const type = e.type || "other";
+        
+        let dateStr = e.date; // e.g. "2026-05-20"
+        if (!dateStr || typeof dateStr !== "string" || !dateStr.includes("-")) return;
+        
+        const timeStr = e.time || "08:00"; // e.g. "08:00"
+
+        const dateParts = dateStr.split('-');
+        if (dateParts.length !== 3) return;
+        const [year, month, day] = dateParts;
+        const [hours, mins] = timeStr.split(':');
+        
+        const paddedHours = (hours || "00").padStart(2, '0');
+        const paddedMins = (mins || "00").padStart(2, '0');
+
+        const startStr = `${year}${month}${day}T${paddedHours}${paddedMins}00`;
+        
+        let endHours = (parseInt(paddedHours, 10) + 1);
+        if (endHours >= 24) {
+          endHours = 23;
+        }
+        const paddedEndHours = endHours.toString().padStart(2, '0');
+        const endStr = `${year}${month}${day}T${paddedEndHours}${paddedMins}00`;
+
+        icsContent += `BEGIN:VEVENT\n` +
+                      `UID:${id}@fintro.pro\n` +
+                      `DTSTAMP:${year}${month}${day}T000000Z\n` +
+                      `DTSTART:${startStr}\n` +
+                      `DTEND:${endStr}\n` +
+                      `SUMMARY:${title}\n` +
+                      `DESCRIPTION:Loai su kien: ${type}\n` +
+                      `END:VEVENT\n`;
+      });
+
+      icsContent += "END:VCALENDAR";
+
+      res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="lich-gia-dinh.ics"');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      return res.send(icsContent);
+
+    } catch (error: any) {
+      console.error("Error generating ICS subscription:", error);
+      res.status(500).send("Internal Server Error");
+    }
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });

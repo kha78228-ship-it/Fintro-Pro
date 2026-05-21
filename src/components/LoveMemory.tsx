@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Heart, Clock, Calendar, BookHeart, Plus, X, Trash2 } from 'lucide-react';
+import { Heart, Clock, Calendar, BookHeart, Plus, X, Trash2, Image as ImageIcon, Sparkles, Upload, Loader2, Bold, Italic, List } from 'lucide-react';
 import { differenceInDays, differenceInMonths, differenceInYears } from 'date-fns';
 import { collection, query, where, getDocs, setDoc, doc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../lib/firebase';
 import { User } from 'firebase/auth';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface LoveMemoryProps {
   user?: User | null;
@@ -22,6 +25,15 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
   const [newMemoryTitle, setNewMemoryTitle] = useState('');
   const [newMemoryContent, setNewMemoryContent] = useState('');
   const [newMemoryDate, setNewMemoryDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newMemoryPhotos, setNewMemoryPhotos] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showAIPrompt, setShowAIPrompt] = useState(false);
+  const [aiPrompt, setAIPrompt] = useState('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sharedFundId, setSharedFundId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +89,83 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
     return { years, months, days, totalDays };
   };
 
+  const insertMarkdown = (syntax: string) => {
+    if (!textareaRef.current) return;
+    const { selectionStart, selectionEnd } = textareaRef.current;
+    const textBefore = newMemoryContent.substring(0, selectionStart);
+    const textSelected = newMemoryContent.substring(selectionStart, selectionEnd);
+    const textAfter = newMemoryContent.substring(selectionEnd);
+    let insertedText = '';
+    
+    if (syntax === 'bold') insertedText = `**${textSelected || 'Đậm'}**`;
+    else if (syntax === 'italic') insertedText = `*${textSelected || 'Nghiêng'}*`;
+    else if (syntax === 'list') insertedText = `\n- ${textSelected || 'Danh sách'}`;
+    
+    setNewMemoryContent(textBefore + insertedText + textAfter);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 0);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !user) return;
+    setIsUploading(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < e.target.files.length; i++) {
+          const file = e.target.files[i];
+          const storageRef = ref(storage, `memories/${user.uid}/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          uploadedUrls.push(url);
+      }
+      setNewMemoryPhotos(prev => [...prev, ...uploadedUrls]);
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert("Không thể tải ảnh lên. Vui lòng thử lại.");
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleAIGenerate = async () => {
+      if (!aiPrompt.trim() || !user) return;
+      setIsGeneratingAI(true);
+      try {
+          const res = await fetch('/api/gemini/generateImage', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: aiPrompt })
+          });
+          const data = await res.json();
+          if (data.imageUrl) {
+              const resData = await fetch(data.imageUrl);
+              const blob = await resData.blob();
+              const storageRef = ref(storage, `memories/${user.uid}/ai_${Date.now()}.png`);
+              await uploadBytes(storageRef, blob);
+              const url = await getDownloadURL(storageRef);
+              setNewMemoryPhotos(prev => [...prev, url]);
+              setAIPrompt('');
+              setShowAIPrompt(false);
+          } else {
+              alert(data.error || "Failed to generate image.");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("Có lỗi xảy ra khi tạo ảnh bằng AI.");
+      } finally {
+          setIsGeneratingAI(false);
+      }
+  };
+
+  const removePhoto = (index: number) => {
+    setNewMemoryPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleAddMemory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemoryTitle.trim() || !user) return;
@@ -88,6 +177,7 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
         title: newMemoryTitle,
         content: newMemoryContent,
         date: newMemoryDate,
+        photos: newMemoryPhotos,
         createdAt: serverTimestamp()
       };
       await setDoc(docRef, newMemory);
@@ -95,6 +185,7 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
       setNewMemoryTitle('');
       setNewMemoryContent('');
       setNewMemoryDate(new Date().toISOString().split('T')[0]);
+      setNewMemoryPhotos([]);
       setShowAddMemory(false);
     } catch(err) {
       console.error(err);
@@ -270,13 +361,90 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest mb-1">Nội dung</label>
-                  <textarea 
-                    value={newMemoryContent}
-                    onChange={e => setNewMemoryContent(e.target.value)}
-                    className="w-full border-b-2 border-neutral-200 py-2 px-1 outline-none focus:border-pink-500 transition-colors bg-transparent min-h-[100px]"
-                    placeholder="Lưu lại những cảm xúc, kỷ niệm đáng nhớ..."
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest">Nội dung</label>
+                    <div className="flex gap-2">
+                      {isPreviewMode ? (
+                        <button type="button" onClick={() => setIsPreviewMode(false)} className="text-xs font-bold text-pink-500 hover:text-pink-600">Chỉnh sửa</button>
+                      ) : (
+                        <button type="button" onClick={() => setIsPreviewMode(true)} className="text-xs font-bold text-neutral-500 hover:text-neutral-700">Xem trước</button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {!isPreviewMode ? (
+                    <div className="border-2 border-neutral-200 rounded-3xl overflow-hidden focus-within:border-pink-500 transition-colors bg-transparent">
+                      <div className="flex items-center gap-1 p-2 border-b border-neutral-100 bg-neutral-50">
+                        <button type="button" onClick={() => insertMarkdown('bold')} className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-lg hover:bg-neutral-200" title="In đậm"><Bold className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => insertMarkdown('italic')} className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-lg hover:bg-neutral-200" title="In nghiêng"><Italic className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => insertMarkdown('list')} className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-lg hover:bg-neutral-200" title="Danh sách"><List className="w-4 h-4" /></button>
+                      </div>
+                      <textarea
+                        ref={textareaRef}
+                        value={newMemoryContent}
+                        onChange={e => setNewMemoryContent(e.target.value)}
+                        className="w-full p-4 outline-none min-h-[150px] resize-y"
+                        placeholder="Lưu lại những cảm xúc, kỷ niệm đáng nhớ... (Hỗ trợ Markdown)"
+                      />
+                    </div>
+                  ) : (
+                    <div className="border-2 border-neutral-200 rounded-3xl p-4 min-h-[150px] bg-neutral-50 overflow-y-auto markdown-body">
+                      {newMemoryContent ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{newMemoryContent}</ReactMarkdown>
+                      ) : (
+                        <p className="text-neutral-400 italic">Chưa có nội dung...</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-neutral-500 uppercase tracking-widest">Hình ảnh đính kèm</label>
+                  
+                  {newMemoryPhotos.length > 0 && (
+                    <div className="flex flex-wrap gap-3">
+                      {newMemoryPhotos.map((photo, index) => (
+                        <div key={index} className="relative w-24 h-24 rounded-2xl overflow-hidden border border-neutral-200 group">
+                          <img src={photo} alt={`Memory ${index}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          <button 
+                            type="button" 
+                            onClick={() => removePhoto(index)}
+                            className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-sm font-semibold rounded-3xl transition-colors">
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      Tải ảnh lên
+                    </button>
+                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} multiple accept="image/*" className="hidden" />
+
+                    <button type="button" onClick={() => setShowAIPrompt(!showAIPrompt)} className="flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 text-sm font-semibold rounded-3xl transition-colors border border-pink-200">
+                      <Sparkles className="w-4 h-4" />
+                      Tạo bằng AI
+                    </button>
+                  </div>
+
+                  <AnimatePresence>
+                    {showAIPrompt && (
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                        <div className="p-3 bg-pink-50/50 rounded-2xl border border-pink-100 mt-2 space-y-2">
+                           <input type="text" value={aiPrompt} onChange={(e) => setAIPrompt(e.target.value)} placeholder="Mô tả bức ảnh bạn muốn tạo..." className="w-full text-sm p-2 outline-none border border-neutral-200 rounded-xl" />
+                           <div className="flex justify-end">
+                             <button type="button" onClick={handleAIGenerate} disabled={isGeneratingAI || !aiPrompt.trim()} className="flex items-center gap-1.5 px-4 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-sm font-bold rounded-2xl transition-colors disabled:opacity-50">
+                               {isGeneratingAI ? <Loader2 className="w-4 h-4 animate-spin" /> : "Tạo"}
+                             </button>
+                           </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
                 <div className="pt-2 text-right">
                   <button type="submit" className="bg-pink-500 text-white font-bold px-6 py-2 rounded-3xl hover:bg-pink-600 transition-colors">
@@ -312,8 +480,20 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
                   <span className="text-xs text-pink-500/80 font-medium">{new Date(mem.date).getFullYear()}</span>
                 </div>
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <h4 className="text-xl font-bold text-neutral-900 mb-2 truncate" title={mem.title}>{mem.title}</h4>
-                  <p className="text-neutral-600 whitespace-pre-wrap text-sm leading-relaxed">{mem.content}</p>
+                  <h4 className="text-xl font-bold text-neutral-900 mb-2" title={mem.title}>{mem.title}</h4>
+                  <div className="text-neutral-600 text-sm leading-relaxed mb-4 markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{mem.content || ''}</ReactMarkdown>
+                  </div>
+                  
+                  {mem.photos && mem.photos.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {mem.photos.map((photo: string, index: number) => (
+                        <a key={index} href={photo} target="_blank" rel="noreferrer" className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-neutral-200 block hover:opacity-90 transition-opacity">
+                          <img src={photo} alt={`Memory img ${index}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 
                 <button 

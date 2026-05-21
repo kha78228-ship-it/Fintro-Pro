@@ -11,30 +11,43 @@ interface DashboardProps {
   transactions: Transaction[];
   onDeleteTransaction: (id: string) => void;
   setCurrentView: (view: any) => void;
-  appTheme?: "vintage" | "vietnam";
+  appTheme?: "vintage" | "vietnam" | "pink_cute";
 }
 
 const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, appTheme = "vietnam" }: DashboardProps) => {
   const { formatMoney } = useCurrency();
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-  const weekStart = new Date(new Date().setDate(new Date().getDate() - new Date().getDay()));
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const yearStart = new Date(new Date().getFullYear(), 0, 1);
+  const today = new Date();
+  
+  const { todayExpense, weekExpense, monthExpense, yearExpense, totalIncome, totalGlobalExpense, balance } = useMemo(() => {
+    const todayS = new Date(new Date().setHours(0, 0, 0, 0));
+    const weekS = new Date(new Date().setDate(new Date().getDate() - new Date().getDay()));
+    const monthS = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const yearS = new Date(new Date().getFullYear(), 0, 1);
 
-  const getExpenseTotal = (startDate: Date) => {
-    return transactions
+    const calcTotal = (startDate: Date) => transactions
       .filter(t => t.type === TransactionType.EXPENSE && new Date(t.date) >= startDate)
       .reduce((sum, t) => sum + t.amount, 0);
-  };
 
-  const todayExpense = getExpenseTotal(todayStart);
-  const weekExpense = getExpenseTotal(weekStart);
-  const monthExpense = getExpenseTotal(monthStart);
-  const yearExpense = getExpenseTotal(yearStart);
+    const income = transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
+    const expense = transactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
 
-  const totalIncome = transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
-  const totalGlobalExpense = transactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
-  const balance = totalIncome - totalGlobalExpense;
+    return {
+      todayExpense: calcTotal(todayS),
+      weekExpense: calcTotal(weekS),
+      monthExpense: calcTotal(monthS),
+      yearExpense: calcTotal(yearS),
+      totalIncome: income,
+      totalGlobalExpense: expense,
+      balance: income - expense
+    };
+  }, [transactions]);
+
+  const upcomingTransactions = useMemo(() => {
+    return transactions
+      .filter(t => new Date(t.date) > new Date())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 3);
+  }, [transactions]);
 
   // 30 Days trend data for chart
   const dailyTrendData = useMemo(() => {
@@ -293,18 +306,14 @@ Hãy cùng nhau quản lý tài chính trên Fintro Pro!`;
       </div>
 
       {/* Upcoming Transactions */}
-      {transactions.filter(t => new Date(t.date) > new Date()).length > 0 && (
+      {upcomingTransactions.length > 0 && (
         <motion.div
            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
            className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100/50"
         >
           <h3 className="text-lg font-display font-bold text-neutral-900 mb-4">Sắp tới</h3>
           <div className="space-y-3">
-            {transactions
-              .filter(t => new Date(t.date) > new Date())
-              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-              .slice(0, 3)
-              .map(t => (
+            {upcomingTransactions.map(t => (
                 <div key={t.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-3xl">
                    <div className="flex items-center gap-3">
                      <div className={`p-2 rounded-3xl ${t.type === TransactionType.EXPENSE ? 'bg-orange-100 text-orange-600' : 'bg-neutral-100 text-neutral-600'}`}>

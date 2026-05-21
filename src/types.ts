@@ -19,6 +19,8 @@ export interface Transaction {
   userId: string;
   isRecurring?: boolean;
   recurringPeriod?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'none';
+  emotion?: string;
+  categoryObj?: Category;
 }
 
 export interface Budget {
@@ -54,4 +56,29 @@ export interface Goal {
   deadline?: string;
   icon: string;
   userId: string;
+  scope?: 'personal' | 'shared';
+  creatorName?: string;
+}
+
+export interface Debt {
+  id?: string;
+  title: string;
+  amount: number;
+  type: 'owe' | 'lent';
+  person: string;
+  dueDate?: string;
+  status: 'pending' | 'completed';
+  userId: string;
+  createdAt?: any;
+}
+
+export interface Subscription {
+  id?: string;
+  name: string;
+  amount: number;
+  billingCycle: 'monthly' | 'yearly';
+  nextBillingDate: string;
+  category: string;
+  userId: string;
+  icon?: string;
 }
