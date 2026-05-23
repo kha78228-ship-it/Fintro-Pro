@@ -1,11 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Check, Copy, UserMinus, MessageCircle, Send, X, PhoneCall, Smile, Loader2, Heart, Mic, Square, Trash2 } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { Users, Check, Copy, UserMinus, MessageCircle, Send, X, PhoneCall, Smile, Loader2, Heart, Mic, Square, Trash2, Video, ExternalLink } from 'lucide-react';
+import { db, auth } from '../lib/firebase';
+import { GoogleAuthProvider, linkWithPopup, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, deleteDoc, collection, query, onSnapshot, serverTimestamp, orderBy, addDoc, getDoc, getDocs, where, deleteField } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import AIAvatar from './AIAvatar';
 import EmojiPicker from 'emoji-picker-react';
+import { connectGoogleMeet, getGoogleMeetToken, createGoogleMeetSpace, setGoogleMeetToken } from '../lib/meetService';
+import { 
+  connectGoogleChat, 
+  getGoogleChatToken, 
+  setGoogleChatToken, 
+  disconnectGoogleChat,
+  listGoogleChatSpaces, 
+  createGoogleChatSpace, 
+  listGoogleChatMessages, 
+  sendGoogleChatMessage, 
+  ChatSpace, 
+  ChatMessage 
+} from '../lib/chatService';
 
 interface FriendsViewProps {
   user: any;
@@ -37,7 +51,25 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
   const [bubbleNoteDraft, setBubbleNoteDraft] = useState('');
   const [bubbleVisibleToDraft, setBubbleVisibleToDraft] = useState<string[]>(['all']);
 
-  const [activeTab, setActiveTab] = useState<'friends' | 'groups' | 'requests'>('friends');
+  const [activeTab, setActiveTab] = useState<'friends' | 'groups' | 'requests' | 'gchat'>('friends');
+
+  // Google Chat States
+  const [googleChatToken, setGoogleChatTokenState] = useState<string | null>(getGoogleChatToken());
+  const [googleChatSpaces, setGoogleChatSpaces] = useState<ChatSpace[]>([]);
+  const [selectedGoogleChatSpace, setSelectedGoogleChatSpace] = useState<ChatSpace | null>(null);
+  const [googleChatMessages, setGoogleChatMessages] = useState<ChatMessage[]>([]);
+  const [isGChatLoading, setIsGChatLoading] = useState(false);
+  const [isGChatSpacesLoading, setIsGChatSpacesLoading] = useState(false);
+  const [gchatSpaceNameInput, setGChatSpaceNameInput] = useState('');
+  const [isCreatingGChatSpace, setIsCreatingGChatSpace] = useState(false);
+  const [showCreateGChatSpaceModal, setShowCreateGChatSpaceModal] = useState(false);
+  const [gchatMessageInput, setGChatMessageInput] = useState('');
+  const [isSendingGChatMessage, setIsSendingGChatMessage] = useState(false);
+
+  // Google Chat Direct Sync State
+  const [activeLinkedGChatSpace, setActiveLinkedGChatSpace] = useState<{name: string, displayName: string} | null>(null);
+  const [showGChatSyncModal, setShowGChatSyncModal] = useState(false);
+  const [showMeetSelectionModal, setShowMeetSelectionModal] = useState(false);
 
   // Group Chats listener
   useEffect(() => {
@@ -98,6 +130,105 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
       if (updated) setSelectedFriend(updated);
     }
   }, [friendsList]);
+
+  // Google Chat Messages Polling listener
+  useEffect(() => {
+    if (!googleChatToken || !selectedGoogleChatSpace) return;
+
+    const fetchMessages = async () => {
+      try {
+        const msgs = await listGoogleChatMessages(googleChatToken, selectedGoogleChatSpace.name);
+        const sortedMsgs = [...msgs].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
+        setGoogleChatMessages(sortedMsgs);
+      } catch (err) {
+        console.error("Failed to fetch Google Chat messages:", err);
+      }
+    };
+
+    fetchMessages(); // initial fetch
+
+    const intervalId = setInterval(fetchMessages, 8000); // 8-second poll
+    return () => clearInterval(intervalId);
+  }, [googleChatToken, selectedGoogleChatSpace]);
+
+  const fetchGChatSpaces = async (token: string) => {
+    setIsGChatSpacesLoading(true);
+    try {
+      const spaces = await listGoogleChatSpaces(token);
+      setGoogleChatSpaces(spaces);
+    } catch (err) {
+      console.error("Error fetching spaces:", err);
+    } finally {
+      setIsGChatSpacesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (googleChatToken && activeTab === 'gchat') {
+      fetchGChatSpaces(googleChatToken);
+    }
+  }, [googleChatToken, activeTab]);
+
+  const handleConnectGChat = async () => {
+    try {
+      const result = await connectGoogleChat();
+      if (result) {
+        setGoogleChatTokenState(result.accessToken);
+        setGoogleChatToken(result.accessToken, result.user);
+        fetchGChatSpaces(result.accessToken);
+      }
+    } catch (err: any) {
+      console.error("Error connecting Google Chat:", err);
+      window.alert(err.message || "Không thể kết nối với Google Chat. Vui lòng thử lại.");
+    }
+  };
+
+  const handleDisconnectGChat = () => {
+    disconnectGoogleChat();
+    setGoogleChatTokenState(null);
+    setGoogleChatSpaces([]);
+    setSelectedGoogleChatSpace(null);
+    setGoogleChatMessages([]);
+  };
+
+  const handleCreateGChatSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleChatToken || !gchatSpaceNameInput.trim()) return;
+    setIsCreatingGChatSpace(true);
+    try {
+      const newSpace = await createGoogleChatSpace(googleChatToken, gchatSpaceNameInput.trim());
+      setGChatSpaceNameInput('');
+      setShowCreateGChatSpaceModal(false);
+      await fetchGChatSpaces(googleChatToken);
+      setSelectedGoogleChatSpace(newSpace);
+    } catch (err: any) {
+      console.error("Error creating space:", err);
+      window.alert(err.message || "Không thể tạo phòng Google Chat. Hãy thử lại.");
+    } finally {
+      setIsCreatingGChatSpace(false);
+    }
+  };
+
+  const handleSendGChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleChatToken || !selectedGoogleChatSpace || !gchatMessageInput.trim()) return;
+    
+    const textToSend = gchatMessageInput.trim();
+    setGChatMessageInput('');
+    setIsSendingGChatMessage(true);
+    try {
+      await sendGoogleChatMessage(googleChatToken, selectedGoogleChatSpace.name, textToSend);
+      // Refresh messages
+      const msgs = await listGoogleChatMessages(googleChatToken, selectedGoogleChatSpace.name);
+      const sortedMsgs = [...msgs].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
+      setGoogleChatMessages(sortedMsgs);
+    } catch (err: any) {
+      console.error("Error sending Google Chat message:", err);
+      window.alert(err.message || "Không thể gửi tin nhắn. Hãy thử lại.");
+    } finally {
+      setIsSendingGChatMessage(false);
+    }
+  };
   
   // Chat state
   const [messages, setMessages] = useState<any[]>([]);
@@ -105,6 +236,139 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Google Meet State & Action
+  const [isCreatingMeet, setIsCreatingMeet] = useState(false);
+
+  const generateRandomMeetCode = (): string => {
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    const randPart = (len: number) => {
+      let s = '';
+      for (let i = 0; i < len; i++) {
+        s += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return s;
+    };
+    return `${randPart(3)}-${randPart(4)}-${randPart(3)}`;
+  };
+
+  const handleCreateGoogleMeet = async (forcingAnonymous: boolean = false) => {
+    if (forcingAnonymous) {
+      setIsCreatingMeet(true);
+      try {
+        const meetCode = generateRandomMeetCode();
+        const meetingUri = `https://meet.google.com/${meetCode}`;
+        
+        let chatId = '';
+        let participants: string[] = [];
+        if (selectedFriend) {
+          participants = [user.uid, selectedFriend.friendId].sort();
+          chatId = `${participants[0]}_${participants[1]}`;
+        } else if (selectedGroupChat) {
+          chatId = selectedGroupChat.id;
+          participants = selectedGroupChat.participants;
+        }
+
+        if (!chatId) return;
+
+        const inviteText = `[Gọi thoại ẩn danh 👤] Phòng họp Google Meet đã được tạo thành công! Hãy tham gia cùng tôi: ${meetingUri}`;
+
+        await addDoc(collection(db, `chats/${chatId}/messages`), {
+          text: inviteText,
+          senderId: user.uid,
+          timestamp: serverTimestamp()
+        });
+
+        await setDoc(doc(db, 'chats', chatId), {
+          participants,
+          lastMessage: "Đã tạo phòng họp Google Meet ẩn danh 🎥",
+          lastSenderId: user.uid,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        setShowMeetSelectionModal(false);
+        window.open(meetingUri, '_blank');
+      } catch (err: any) {
+        console.error("Meet Creation error:", err);
+        window.alert(err.message || "Không thể tạo phòng họp Google Meet. Hãy thử lại.");
+      } finally {
+        setIsCreatingMeet(false);
+      }
+      return;
+    }
+
+    // Official OAuth flow (can link anonymous users)
+    let token = getGoogleMeetToken();
+    if (!token) {
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
+        
+        let result;
+        if (auth.currentUser?.isAnonymous) {
+          // Keep friends list and settings by linking current guest account instead of logging out
+          result = await linkWithPopup(auth.currentUser, provider);
+        } else {
+          result = await signInWithPopup(auth, provider);
+        }
+        
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          setGoogleMeetToken(credential.accessToken, result.user);
+          token = credential.accessToken;
+        }
+      } catch (err: any) {
+        console.error("Popup Auth failed:", err);
+        window.alert(err.message || "Không thể xác thực với Google. Hãy thử lại.");
+        return;
+      }
+    }
+
+    if (!token) return;
+
+    setIsCreatingMeet(true);
+    try {
+      const space = await createGoogleMeetSpace(token);
+      
+      let chatId = '';
+      let participants: string[] = [];
+      if (selectedFriend) {
+        participants = [user.uid, selectedFriend.friendId].sort();
+        chatId = `${participants[0]}_${participants[1]}`;
+      } else if (selectedGroupChat) {
+        chatId = selectedGroupChat.id;
+        participants = selectedGroupChat.participants;
+      }
+
+      if (!chatId) return;
+
+      const inviteText = `Cuộc họp Google Meet đã được tạo! Bạn có thể tham gia ngay tại link sau: ${space.meetingUri}`;
+
+      await addDoc(collection(db, `chats/${chatId}/messages`), {
+        text: inviteText,
+        senderId: user.uid,
+        timestamp: serverTimestamp()
+      });
+
+      // Update chat last message time
+      await setDoc(doc(db, 'chats', chatId), {
+        participants,
+        lastMessage: "Đã tạo một phòng họp Google Meet mới 🎥",
+        lastSenderId: user.uid,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      setShowMeetSelectionModal(false);
+      // Automatically open the link in a new tab
+      window.open(space.meetingUri, '_blank');
+    } catch (err: any) {
+      console.error("Meet Creation error:", err);
+      // Fallback: alert
+      window.alert(err.message || "Không thể tạo phòng họp Google Meet chính thức. Bạn hãy sử dụng phương thức ẩn danh nhanh.");
+    } finally {
+      setIsCreatingMeet(false);
+    }
+  };
 
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
   const typingTimeoutRef = useRef<any>(null);
@@ -213,6 +477,14 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
       if (docSnap.exists()) {
         const data = docSnap.data();
         setTypingStatus(data.typing || {});
+        if (data.gchatSpaceName) {
+          setActiveLinkedGChatSpace({
+            name: data.gchatSpaceName,
+            displayName: data.gchatSpaceDisplayName || 'Đồng bộ Google Chat'
+          });
+        } else {
+          setActiveLinkedGChatSpace(null);
+        }
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `chats/${chatId}`);
@@ -469,6 +741,17 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
           [user.uid]: false
         }
       }, { merge: true });
+
+      // ---- GOOGLE CHAT REALTIME SYNC ----
+      if (activeLinkedGChatSpace && googleChatToken) {
+        try {
+          const senderName = user.displayName || 'Tài khoản ẩn danh 👤';
+          const syncedText = `[Đồng bộ 💬] ${senderName}: ${text}`;
+          await sendGoogleChatMessage(googleChatToken, activeLinkedGChatSpace.name, syncedText);
+        } catch (err) {
+          console.error("Lỗi đồng bộ tin nhắn sang Google Chat:", err);
+        }
+      }
       
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `chats/${chatId}/messages`);
@@ -517,7 +800,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
         const { chatId, participants } = getChatIdInfo();
         if (!chatId || !user) return;
 
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
         
         setIsUploading(true);
         try {
@@ -578,7 +861,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden relative h-[600px] max-h-[80vh]">
         <AnimatePresence mode="wait">
-          {(selectedFriend || selectedGroupChat) ? (
+          {(selectedFriend || selectedGroupChat || selectedGoogleChatSpace) ? (
               <motion.div 
                 key="chat"
                 initial={{ opacity: 0, x: 20 }}
@@ -590,49 +873,201 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 {/* Chat Header */}
                 <div className="border-b border-neutral-100 p-4 flex items-center gap-3 bg-white shrink-0 sticky top-0 z-10 shadow-sm">
                   <button 
-                    onClick={() => { setSelectedFriend(null); setSelectedGroupChat(null); }}
+                    onClick={() => { setSelectedFriend(null); setSelectedGroupChat(null); setSelectedGoogleChatSpace(null); }}
                     className="px-3 py-1.5 bg-neutral-100 text-neutral-600 text-sm font-bold rounded-3xl hover:bg-neutral-200 transition-colors"
                   >
                     Trở lại
                   </button>
-                  {selectedFriend ? (
+                  {selectedGoogleChatSpace ? (
                     <>
-                      <AIAvatar uid={selectedFriend.friendId} name={selectedFriend.displayName} photoURL={selectedFriend.photoURL} className="w-8 h-8 rounded-full border border-neutral-100 ml-2 object-cover bg-neutral-200" />
-                      <div className="flex-1">
-                        <h3 className="font-bold text-neutral-800 text-sm leading-none">{selectedFriend.displayName || 'Bạn bè'}</h3>
-                        <span className={`text-[10px] font-semibold ${friendStatuses[selectedFriend.friendId] === 'online' ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                          {friendStatuses[selectedFriend.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center ml-2 border border-emerald-100 shrink-0">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-extrabold text-neutral-800 text-[13px] sm:text-sm leading-tight truncate">
+                          {selectedGoogleChatSpace.displayName || selectedGoogleChatSpace.name.split('/').pop() || 'Phòng Google Chat'}
+                        </h3>
+                        <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider block mt-0.5">
+                          {selectedGoogleChatSpace.spaceType || 'SPACE'} • Google Chat 💬
                         </span>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            if (googleChatToken && selectedGoogleChatSpace) {
+                              const fetchMsgs = async () => {
+                                const msgs = await listGoogleChatMessages(googleChatToken, selectedGoogleChatSpace.name);
+                                const sortedMsgs = [...msgs].sort((a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime());
+                                setGoogleChatMessages(sortedMsgs);
+                              };
+                              fetchMsgs().catch(err => console.error("Error refreshing Google Chat:", err));
+                            }
+                          }}
+                          className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-2xl transition-all border border-emerald-100/60"
+                          title="Làm mới cuộc trò chuyện"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </>
+                  ) : selectedFriend ? (
+                    <>
+                      <AIAvatar uid={selectedFriend.friendId} name={selectedFriend.displayName} photoURL={selectedFriend.photoURL} className="w-8 h-8 rounded-full border border-neutral-100 ml-2 object-cover bg-neutral-200" />
+                      <div className="flex-1 min-w-0 pr-1">
+                        <h3 className="font-bold text-neutral-800 text-sm leading-none truncate">{selectedFriend.displayName || 'Bạn bè'}</h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={`text-[9px] font-semibold uppercase tracking-wider ${friendStatuses[selectedFriend.friendId] === 'online' ? 'text-emerald-600' : 'text-neutral-400'}`}>
+                            {friendStatuses[selectedFriend.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                          </span>
+                          {activeLinkedGChatSpace && (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-200 rounded px-1.5 py-0.5 font-bold select-none whitespace-nowrap truncate max-w-[120px]" title={activeLinkedGChatSpace.displayName}>
+                              Đồng bộ: {activeLinkedGChatSpace.displayName} 💬
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 items-center shrink-0">
+                        <button
+                          onClick={() => setShowGChatSyncModal(true)}
+                          className={`p-2 rounded-2xl border transition-all flex items-center justify-center ${
+                            activeLinkedGChatSpace 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                              : 'bg-white hover:bg-neutral-50 text-neutral-500 hover:text-neutral-700 border-neutral-200'
+                          }`}
+                          title="Đồng bộ Cuộc trò chuyện sang Google Chat"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => setShowMeetSelectionModal(true)}
+                          disabled={isCreatingMeet}
+                          className="p-2 bg-emerald-50 text-emerald-600 font-bold rounded-2xl hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1 border border-emerald-100/50"
+                          title="Tạo cuộc họp Google Meet"
+                        >
+                          {isCreatingMeet ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Video className="w-4 h-4" />
+                          )}
+                        </button>
+                        
                         <button
                           onClick={() => {
                             if (onStartCall) onStartCall(selectedFriend.friendId, false);
                           }}
-                          className="p-2 bg-neutral-50 text-neutral-600 font-bold rounded-3xl hover:bg-neutral-100 transition-colors flex items-center justify-center shrink-0"
+                          className="p-2 bg-neutral-50 text-neutral-600 font-bold rounded-2xl hover:bg-neutral-100 transition-colors flex items-center justify-center border border-neutral-200/30"
                           title="Gọi Thoại"
                         >
-                          <PhoneCall className="w-5 h-5" />
+                          <PhoneCall className="w-4 h-4" />
                         </button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div className="w-8 h-8 rounded-full bg-neutral-100 bg-neutral-100 flex items-center justify-center ml-2 border border-neutral-200">
+                      <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center ml-2 border border-neutral-200 shrink-0">
                         <Users className="w-4 h-4 text-neutral-500" />
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-neutral-800 text-sm leading-none">{selectedGroupChat?.name || 'Nhóm'}</h3>
-                        <span className="text-[10px] text-neutral-500 font-semibold">{selectedGroupChat?.participants?.length || 0} thành viên</span>
+                      <div className="flex-1 min-w-0 pr-1">
+                        <h3 className="font-bold text-neutral-800 text-sm leading-none truncate">{selectedGroupChat?.name || 'Nhóm'}</h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[9px] text-neutral-400 font-semibold">{selectedGroupChat?.participants?.length || 0} thành viên</span>
+                          {activeLinkedGChatSpace && (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-200 rounded px-1.5 py-0.5 font-bold select-none whitespace-nowrap truncate max-w-[120px]" title={activeLinkedGChatSpace.displayName}>
+                              Đồng bộ: {activeLinkedGChatSpace.displayName} 💬
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {/* Group calls could be added here later */}
+                      <div className="flex gap-1.5 items-center shrink-0">
+                        <button
+                          onClick={() => setShowGChatSyncModal(true)}
+                          className={`p-2 rounded-2xl border transition-all flex items-center justify-center ${
+                            activeLinkedGChatSpace 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                              : 'bg-white hover:bg-neutral-50 text-neutral-500 hover:text-neutral-700 border-neutral-200'
+                          }`}
+                          title="Đồng bộ Nhóm sang Google Chat"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => setShowMeetSelectionModal(true)}
+                          disabled={isCreatingMeet}
+                          className="p-2 bg-emerald-50 text-emerald-600 font-bold rounded-2xl hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1 border border-emerald-100/50"
+                          title="Tạo cuộc họp Google Meet cho nhóm"
+                        >
+                          {isCreatingMeet ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Video className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
                 
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50 pb-2">
-                  {messages.length === 0 ? (
+                  {selectedGoogleChatSpace ? (
+                    // Google Chat Messages Rendering
+                    googleChatMessages.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+                          <MessageCircle className="w-8 h-8 text-neutral-200" />
+                        </div>
+                        <p className="font-bold text-neutral-900 mb-1">Không có tin nhắn nào</p>
+                        <p className="text-sm text-neutral-500">Hãy viết tin nhắn đầu tiên để cùng trò chuyện bằng API thực trên Google Chat! 💬</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 flex flex-col justify-end min-h-full">
+                        {googleChatMessages.map((msg, i) => {
+                          const isMe = msg.sender?.displayName === user?.displayName || msg.sender?.name?.includes('users/me');
+                          const prevMsg = googleChatMessages[i - 1];
+                          const showAvatar = !prevMsg || prevMsg.sender?.displayName !== msg.sender?.displayName;
+                          const dateObj = new Date(msg.createTime);
+                          const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + dateObj.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+
+                          return (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              key={msg.name || i}
+                              className={`flex items-start gap-2 ${isMe ? 'flex-row-reverse' : ''} ${showAvatar ? 'mt-4' : 'mt-1'}`}
+                            >
+                              <div className="w-8 h-8 rounded-full flex-shrink-0 shadow-sm relative overflow-hidden bg-neutral-200">
+                                {msg.sender?.avatarUrl ? (
+                                  <img referrerPolicy="no-referrer" src={msg.sender.avatarUrl} alt={msg.sender.displayName} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold font-mono">
+                                    {(msg.sender?.displayName || 'G')?.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                {showAvatar && (
+                                  <span className="text-[10px] font-bold text-neutral-500 mb-1 px-1">{msg.sender?.displayName || 'Thành viên'}</span>
+                                )}
+                                <div className={`py-2 px-4 rounded-3xl text-sm max-w-[280px] sm:max-w-md break-all leading-relaxed shadow-sm ${
+                                  isMe 
+                                    ? 'bg-emerald-50 text-emerald-950 rounded-tr-none border border-emerald-100' 
+                                    : 'bg-white text-neutral-800 rounded-tl-none border border-neutral-100'
+                                }`}>
+                                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                                </div>
+                                <span className="text-[9px] text-neutral-400 mt-1 px-1 font-mono">{timeStr}</span>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )
+                  ) : messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center px-6">
                       <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
                         <MessageCircle className="w-8 h-8 text-neutral-200" />
@@ -673,28 +1108,62 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                                 {!isMe && showAvatar && (
                                    <span className="text-[11px] text-neutral-500 ml-1 mb-1 font-medium">{msgSenderName || 'Bạn bè'}</span>
                                 )}
-                                <div className={`group relative py-2.5 px-4 text-[15px] shadow-sm leading-relaxed ${
-                                    isMe 
-                                      ? 'bg-neutral-500 text-white rounded-3xl rounded-3xl' 
-                                      : 'bg-white text-neutral-800 border border-neutral-100 rounded-3xl rounded-3xl'
-                                  }`}
-                                >
-                                  <p className="break-words whitespace-pre-wrap text-[14px] sm:text-[15px]">{msg.text}</p>
-                                
-                                {msg.fileUrl && (
-                                  <div className="mt-2 text-center rounded-3xl overflow-hidden relative">
-                                    {msg.isUploading && (
-                                       <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center rounded-3xl z-10 text-white backdrop-blur-[2px]">
-                                         <Loader2 className="w-8 h-8 animate-spin mb-2 drop-shadow-md text-white/90" />
-                                         <span className="text-xs font-medium drop-shadow-md">Đang xử lý...</span>
-                                       </div>
-                                    )}
-                                    {msg.fileType === 'audio' && (
-                                      <audio src={msg.fileUrl} controls={!msg.isUploading} className="max-w-[200px] sm:max-w-[250px] outline-none" />
+                                {msg.text && msg.text.includes('meet.google.com/') ? (
+                                  (() => {
+                                    const meetLink = msg.text.match(/https:\/\/meet\.google\.com\/[a-zA-Z0-9-]+/)?.[0] || msg.text;
+                                    const code = meetLink.split('/').pop() || '...';
+                                    return (
+                                      <div className="flex flex-col gap-3 p-4 bg-white text-neutral-800 border border-neutral-200/80 rounded-3xl shadow-md max-w-xs sm:max-w-sm mt-1">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-100">
+                                            <Video className="w-5 h-5 animate-pulse" />
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-extrabold text-xs sm:text-sm text-neutral-900 leading-snug">Cuộc họp Google Meet</p>
+                                            <p className="text-[10px] sm:text-xs text-neutral-500 truncate mt-0.5 font-medium">Click để tham gia thoại & video</p>
+                                          </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-3 py-1.5 font-mono text-xs text-neutral-600 font-bold">
+                                          <span>MÃ CUỘC HỌP</span>
+                                          <span className="text-neutral-900 tracking-wider font-extrabold">{code}</span>
+                                        </div>
+
+                                        <a 
+                                          href={meetLink} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-3xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm hover:shadow active:scale-[0.98]"
+                                        >
+                                          Tham gia cuộc họp <ExternalLink className="w-3.5 h-3.5" />
+                                        </a>
+                                      </div>
+                                    );
+                                  })()
+                                ) : (
+                                  <div className={`group relative py-2.5 px-4 text-[15px] shadow-sm leading-relaxed ${
+                                      isMe 
+                                        ? 'bg-neutral-500 text-white rounded-3xl rounded-3xl' 
+                                        : 'bg-white text-neutral-800 border border-neutral-100 rounded-3xl rounded-3xl'
+                                    }`}
+                                  >
+                                    <p className="break-words whitespace-pre-wrap text-[14px] sm:text-[15px]">{msg.text}</p>
+                                    
+                                    {msg.fileUrl && (
+                                      <div className="mt-2 text-center rounded-3xl overflow-hidden relative">
+                                        {msg.isUploading && (
+                                           <div className="absolute inset-0 bg-black/20 flex flex-col items-center justify-center rounded-3xl z-10 text-white backdrop-blur-[2px]">
+                                             <Loader2 className="w-8 h-8 animate-spin mb-2 drop-shadow-md text-white/90" />
+                                             <span className="text-xs font-medium drop-shadow-md">Đang xử lý...</span>
+                                           </div>
+                                        )}
+                                        {msg.fileType === 'audio' && (
+                                          <audio src={msg.fileUrl} controls={!msg.isUploading} className="max-w-[200px] sm:max-w-[250px] outline-none" />
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 )}
-                                </div>
                                 <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-neutral-100' : 'text-neutral-400'}`}>
                                   <span>{timeStr}</span>
                                   {isMe && (
@@ -734,7 +1203,7 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 </div>
                 
                 {/* Message Input */}
-                <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-neutral-100 shrink-0 sticky bottom-0 z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] relative">
+                <form onSubmit={selectedGoogleChatSpace ? handleSendGChatMessage : handleSendMessage} className="p-4 bg-white border-t border-neutral-100 shrink-0 sticky bottom-0 z-10 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] relative">
                   <AnimatePresence>
                     {showEmojiPicker && (
                       <motion.div 
@@ -745,7 +1214,11 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       >
                         <EmojiPicker 
                           onEmojiClick={(emojiData) => {
-                            setNewMessage(prev => prev + emojiData.emoji);
+                            if (selectedGoogleChatSpace) {
+                              setGChatMessageInput(prev => prev + emojiData.emoji);
+                            } else {
+                              setNewMessage(prev => prev + emojiData.emoji);
+                            }
                           }}
                         />
                       </motion.div>
@@ -769,7 +1242,15 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       </button>
                     </div>
 
-                    {isRecording ? (
+                    {selectedGoogleChatSpace ? (
+                      <input
+                        type="text"
+                        value={gchatMessageInput}
+                        onChange={e => setGChatMessageInput(e.target.value)}
+                        placeholder="Nhập tin nhắn phát trực tiếp đến Google Chat..."
+                        className="flex-1 bg-neutral-100 rounded-3xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all border-none mb-1 min-w-[100px]"
+                      />
+                    ) : isRecording ? (
                       <div className="flex-1 bg-orange-50/50 rounded-3xl px-4 py-1 flex items-center justify-between border border-orange-100 mb-1">
                         <div className="flex items-center gap-3 text-orange-600">
                            <div className="w-2.5 h-2.5 rounded-3xl bg-orange-500 animate-pulse" />
@@ -794,7 +1275,15 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                       />
                     )}
                     
-                    {!isRecording && (
+                    {selectedGoogleChatSpace ? (
+                      <button 
+                        type="submit"
+                        disabled={!gchatMessageInput.trim() || isSendingGChatMessage}
+                        className="w-12 h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center transition-all shadow-md shadow-emerald-500/20 shrink-0 transform active:scale-95 disabled:opacity-50"
+                      >
+                        {isSendingGChatMessage ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-1" />}
+                      </button>
+                    ) : !isRecording && (
                       newMessage.trim() ? (
                         <button 
                           type="submit"
@@ -825,24 +1314,30 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 transition={{ duration: 0.2 }}
                 className="p-4 sm:p-6 space-y-6 pb-10 absolute inset-0 overflow-y-auto bg-white"
               >
-                <div className="flex bg-neutral-100 p-1 rounded-3xl mb-4 shrink-0 shadow-sm border border-neutral-200 sticky top-0 z-10 backdrop-blur-md bg-white/80">
+                <div className="flex bg-neutral-100 p-1 rounded-3xl mb-4 shrink-0 shadow-sm border border-neutral-200 sticky top-0 z-10 backdrop-blur-md bg-white/80 select-none overflow-x-auto scrollbar-none">
                   <button 
                     onClick={() => setActiveTab('friends')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'friends' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                    className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-3xl transition-all whitespace-nowrap px-2 ${activeTab === 'friends' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
                   >
                     Bạn bè
                   </button>
                   <button 
                     onClick={() => setActiveTab('groups')}
-                    className={`flex-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'groups' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                    className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-3xl transition-all whitespace-nowrap px-2 ${activeTab === 'groups' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
                   >
                     Nhóm
                   </button>
                   <button 
                     onClick={() => setActiveTab('requests')}
-                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-sm font-bold rounded-3xl transition-all ${activeTab === 'requests' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                    className={`flex-1 flex items-center justify-center gap-1 py-2 text-xs sm:text-sm font-bold rounded-3xl transition-all whitespace-nowrap px-2 ${activeTab === 'requests' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
                   >
                     Kết bạn {friendRequests.length > 0 && <span className="bg-orange-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-mono">{friendRequests.length}</span>}
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('gchat')}
+                    className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-3xl transition-all whitespace-nowrap px-2 ${activeTab === 'gchat' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500 hover:text-neutral-700'}`}
+                  >
+                    Google Chat
                   </button>
                 </div>
 
@@ -1000,7 +1495,16 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                             onClick={() => setSelectedFriend(f)}
                           >
                             <div className="flex items-center gap-3">
-                              <AIAvatar uid={f.friendId} name={f.displayName} photoURL={f.photoURL} className="w-8 h-8 rounded-full shadow-inner object-cover bg-neutral-200" />
+                              <AIAvatar 
+                                uid={f.friendId} 
+                                name={f.displayName} 
+                                photoURL={f.photoURL} 
+                                className={`w-8 h-8 rounded-full object-cover bg-neutral-200 transition-all duration-350 ${
+                                  friendStatuses[f.friendId] === 'online' 
+                                    ? 'ring-2 ring-emerald-400 ring-offset-1 shadow-[0_0_10px_rgba(16,185,129,0.65)]' 
+                                    : 'shadow-inner border border-neutral-200'
+                                }`} 
+                              />
                               <div>
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-bold text-neutral-800 group-hover:text-neutral-700 transition-colors">{f.displayName || 'Bạn bè'}</p>
@@ -1010,9 +1514,14 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                                     </span>
                                   )}
                                 </div>
-                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-3xl ${friendStatuses[f.friendId] === 'online' ? 'text-neutral-500 bg-neutral-50' : 'text-neutral-500 bg-neutral-100'}`}>
-                                    {friendStatuses[f.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
-                                  </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-3xl inline-flex items-center gap-1.5 transition-all ${
+                                  friendStatuses[f.friendId] === 'online' 
+                                    ? 'text-emerald-700 bg-emerald-50 border border-emerald-100/60' 
+                                    : 'text-neutral-500 bg-neutral-100 border border-neutral-200/40'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${friendStatuses[f.friendId] === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'}`} />
+                                  {friendStatuses[f.friendId] === 'online' ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                                </span>
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
@@ -1107,6 +1616,119 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                     </div>
                   )}
                 </div>
+                )}
+
+                {activeTab === 'gchat' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-neutral-700 uppercase tracking-widest pl-1">Phòng Google Chat</p>
+                      {googleChatToken && (
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => fetchGChatSpaces(googleChatToken)}
+                            disabled={isGChatSpacesLoading}
+                            className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 p-1.5 px-3 rounded-2xl font-bold transition-all disabled:opacity-50"
+                          >
+                            Tải lại
+                          </button>
+                          <button 
+                            onClick={() => setShowCreateGChatSpaceModal(true)}
+                            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 px-3 rounded-2xl font-bold transition-all"
+                          >
+                            + Tạo phòng
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {!googleChatToken ? (
+                      <div className="bg-neutral-50/50 rounded-3xl p-6 text-center border border-neutral-100/50">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-neutral-100 border border-neutral-200">
+                          <MessageCircle className="w-5 h-5 text-neutral-400" />
+                        </div>
+                        <p className="text-sm text-neutral-800 font-bold mb-1">Kết nối Google Chat</p>
+                        <p className="text-xs text-neutral-500 mb-4 px-4 leading-normal">
+                          Kết nối tài khoản Google để đồng bộ, xem các phòng trò chuyện, và gửi tin nhắn trực tiếp đến Google Chat.
+                        </p>
+                        <button
+                          onClick={handleConnectGChat}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-3xl transition-all shadow-md active:scale-95 inline-flex items-center gap-2"
+                        >
+                          Đăng nhập Google Chat
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between bg-slate-50 rounded-2xl p-3 border border-slate-100 text-xs text-neutral-700 font-bold">
+                          <span className="text-neutral-500 font-medium">Đã kết nối</span>
+                          <button 
+                            onClick={handleDisconnectGChat}
+                            className="text-[10px] text-red-500 hover:text-red-700 font-bold uppercase tracking-wider"
+                          >
+                            Đăng xuất
+                          </button>
+                        </div>
+
+                        {isGChatSpacesLoading ? (
+                          <div className="flex flex-col items-center justify-center py-10 gap-2">
+                            <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
+                            <span className="text-xs text-neutral-500 font-medium">Đang tìm danh sách spaces...</span>
+                          </div>
+                        ) : googleChatSpaces.length === 0 ? (
+                          <div className="bg-neutral-50/50 rounded-3xl p-6 text-center border border-neutral-100/50">
+                            <p className="text-sm text-neutral-600 font-medium">Không tìm thấy phòng Google Chat nào.</p>
+                            <p className="text-xs text-neutral-400 mt-1 mb-3">Tạo phòng mới để bắt đầu cuộc trò chuyện!</p>
+                            <button 
+                              onClick={() => setShowCreateGChatSpaceModal(true)}
+                              className="text-xs bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold px-3 py-1.5 rounded-2xl hover:bg-emerald-100 transition-colors"
+                            >
+                              + Tạo phòng trò chuyện mới
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {googleChatSpaces.map((space) => {
+                              const isSelected = selectedGoogleChatSpace?.name === space.name;
+                              return (
+                                <div 
+                                  key={space.name}
+                                  onClick={() => {
+                                    setSelectedFriend(null);
+                                    setSelectedGroupChat(null);
+                                    setSelectedGoogleChatSpace(space);
+                                  }}
+                                  className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                                    isSelected 
+                                      ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950 shadow-sm' 
+                                      : 'bg-white border-neutral-200 hover:border-neutral-300 text-neutral-800'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                                      isSelected ? 'bg-emerald-100 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'
+                                    }`}>
+                                      <Users className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs sm:text-sm font-extrabold truncate pr-2">
+                                        {space.displayName || space.name.split('/').pop() || 'Phòng Google Chat'}
+                                      </p>
+                                      <p className="text-[10px] text-neutral-400 font-medium uppercase tracking-wider mt-0.5">
+                                        {space.spaceType || 'SPACE'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50/50 px-2 py-0.5 rounded-lg border border-emerald-100 shrink-0">
+                                    Mở
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </motion.div>
             )}
@@ -1322,6 +1944,303 @@ export default function FriendsView({ user, onClose, onStartCall }: FriendsViewP
                 >
                    <X className="w-5 h-5"/>
                 </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Create Google Chat Space Modal */}
+        <AnimatePresence>
+          {showCreateGChatSpaceModal && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute inset-0 bg-black/40 z-[70] flex items-center justify-center p-4 backdrop-blur-sm"
+              onClick={() => setShowCreateGChatSpaceModal(false)}
+            >
+              <div 
+                className="bg-white rounded-3xl p-6 w-full max-w-sm flex flex-col shadow-2xl relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <button 
+                  onClick={() => setShowCreateGChatSpaceModal(false)}
+                  className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-3xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <MessageCircle className="w-6 h-6" />
+                </div>
+
+                <h3 className="text-xl font-bold text-neutral-900 mb-1 font-display">Tạo Phòng Google Chat</h3>
+                <p className="text-xs text-neutral-500 mb-6 leading-relaxed">
+                  Tạo một phòng (Space) Google Chat chính thức để bàn bạc công việc, kế hoạch hoặc giữ liên lạc chất lượng cao!
+                </p>
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="text-xs font-bold text-neutral-700 uppercase tracking-wider block mb-2">Tên phòng trò chuyện</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                      placeholder="Ví dụ: Kế hoạch Tuần mới 🚀"
+                      value={gchatSpaceNameInput}
+                      onChange={e => setGChatSpaceNameInput(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleCreateGChatSpace}
+                  disabled={!gchatSpaceNameInput.trim() || isCreatingGChatSpace}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 rounded-3xl shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                >
+                  {isCreatingGChatSpace ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Đang tạo...
+                    </>
+                  ) : (
+                    "Tạo không gian ngay"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Google Chat Sync Modal */}
+        <AnimatePresence>
+          {showGChatSyncModal && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute inset-0 bg-black/40 z-[70] flex items-center justify-center p-4 backdrop-blur-sm"
+              onClick={() => setShowGChatSyncModal(false)}
+            >
+              <div 
+                className="bg-white rounded-3xl p-6 w-full max-w-sm flex flex-col shadow-2xl relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <button 
+                  onClick={() => setShowGChatSyncModal(false)}
+                  className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-3xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <MessageCircle className="w-6 h-6" />
+                </div>
+
+                <h3 className="text-xl font-bold text-neutral-900 mb-1 font-display">Đồng bộ Google Chat</h3>
+                <p className="text-xs text-neutral-500 mb-6 leading-relaxed">
+                  Liên kết cuộc trò chuyện hiện tại của bạn với một Không gian (Space) trong Google Chat. Tin nhắn mới sẽ tự động được gửi đồng bộ theo thời gian thực!
+                </p>
+
+                {!googleChatToken ? (
+                  <div className="text-center py-4">
+                    <p className="text-xs text-neutral-600 mb-4 font-medium">Hãy kết nối tài khoản Google Chat của bạn trước:</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await handleConnectGChat();
+                        } catch (err) {
+                          console.error("Connect error:", err);
+                        }
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-3xl transition-all shadow-md"
+                    >
+                      Đăng nhập Google Chat
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                    <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Chọn phòng trò chuyện để liên kết:</p>
+                    
+                    {googleChatSpaces.length === 0 ? (
+                      <div className="text-center py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <p className="text-xs text-neutral-500 mb-2 font-medium">Chưa có phòng Google Chat nào.</p>
+                        <button 
+                          onClick={() => {
+                            setShowGChatSyncModal(false);
+                            setActiveTab('gchat');
+                          }}
+                          className="text-[10px] text-emerald-600 hover:underline font-bold"
+                        >
+                          Đi đến mục Tạo phòng
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {googleChatSpaces.map((space) => {
+                          const isCurrentlyLinked = activeLinkedGChatSpace?.name === space.name;
+                          return (
+                            <button
+                              key={space.name}
+                              onClick={async () => {
+                                let chatId = '';
+                                if (selectedFriend) {
+                                  const participants = [user.uid, selectedFriend.friendId].sort();
+                                  chatId = `${participants[0]}_${participants[1]}`;
+                                } else if (selectedGroupChat) {
+                                  chatId = selectedGroupChat.id;
+                                }
+                                if (!chatId) return;
+                                
+                                try {
+                                  await setDoc(doc(db, 'chats', chatId), {
+                                    gchatSpaceName: space.name,
+                                    gchatSpaceDisplayName: space.displayName || space.name.split('/').pop() || 'Space'
+                                  }, { merge: true });
+                                  setShowGChatSyncModal(false);
+                                } catch (err: any) {
+                                  console.error("Link error:", err);
+                                  window.alert("Không thể liên kết cuộc trò chuyện.");
+                                }
+                              }}
+                              className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between ${
+                                isCurrentlyLinked 
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' 
+                                  : 'bg-neutral-50/50 border-neutral-150 hover:bg-neutral-50 text-neutral-800'
+                              }`}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <p className="text-xs font-bold truncate">
+                                  {space.displayName || space.name.split('/').pop()}
+                                </p>
+                                <p className="text-[9px] text-neutral-400 font-medium tracking-wide">
+                                  {space.spaceType || 'SPACE'}
+                                </p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${
+                                isCurrentlyLinked 
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200' 
+                                  : 'bg-white text-neutral-500 border-neutral-200'
+                              }`}>
+                                {isCurrentlyLinked ? 'Đang đồng bộ' : 'Liên kết'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {activeLinkedGChatSpace && (
+                      <div className="pt-2 border-t border-neutral-100">
+                        <button
+                          onClick={async () => {
+                            let chatId = '';
+                            if (selectedFriend) {
+                              const participants = [user.uid, selectedFriend.friendId].sort();
+                              chatId = `${participants[0]}_${participants[1]}`;
+                            } else if (selectedGroupChat) {
+                              chatId = selectedGroupChat.id;
+                            }
+                            if (!chatId) return;
+
+                            try {
+                              await setDoc(doc(db, 'chats', chatId), {
+                                gchatSpaceName: deleteField(),
+                                gchatSpaceDisplayName: deleteField()
+                              }, { merge: true });
+                              setShowGChatSyncModal(false);
+                            } catch (err: any) {
+                              console.error("Unlink error:", err);
+                            }
+                          }}
+                          className="w-full text-center py-2 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-bold rounded-2xl transition-colors border border-red-200/50"
+                        >
+                          Hủy liên kết & Dừng đồng bộ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Google Meet Selection Modal */}
+        <AnimatePresence>
+          {showMeetSelectionModal && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute inset-0 bg-black/40 z-[70] flex items-center justify-center p-4 backdrop-blur-sm"
+              onClick={() => setShowMeetSelectionModal(false)}
+            >
+              <div 
+                className="bg-white rounded-3xl p-6 w-full max-w-sm flex flex-col shadow-2xl relative"
+                onClick={e => e.stopPropagation()}
+              >
+                <button 
+                  onClick={() => setShowMeetSelectionModal(false)}
+                  className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-neutral-700 bg-neutral-100 rounded-3xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 border border-emerald-100">
+                  <Video className="w-6 h-6" />
+                </div>
+
+                <h3 className="text-xl font-bold text-neutral-900 mb-1 font-display">Tạo phòng Google Meet</h3>
+                <p className="text-xs text-neutral-500 mb-6 leading-relaxed">
+                  Lựa chọn cách tạo phòng để gọi điện trực tuyến qua Google Meet. Tương thích đầy đủ với cả các tài khoản ẩn danh!
+                </p>
+
+                <div className="space-y-3">
+                  {/* Option 1: Anonymous Space Generator */}
+                  <button
+                    onClick={() => handleCreateGoogleMeet(true)}
+                    disabled={isCreatingMeet}
+                    className="w-full text-left p-4 rounded-2xl border border-neutral-200 bg-neutral-50/50 hover:bg-neutral-50 transition-all flex items-start gap-3 active:scale-98"
+                  >
+                    <div className="p-2 bg-amber-50 text-amber-600 border border-amber-100 rounded-xl shrink-0">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-neutral-800">Tạo mã Meet ẩn danh (Nhanh nhất) ⚡</p>
+                      <p className="text-[10px] text-neutral-500 mt-0.5 leading-normal">
+                        Mọi tài khoản đều tạo được ngay. Tạo mã phòng tiêu chuẩn chia sẻ tức thì lên khung chat để mời bạn bè tham gia trực tiếp.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Authorized Space */}
+                  <button
+                    onClick={() => handleCreateGoogleMeet(false)}
+                    disabled={isCreatingMeet}
+                    className="w-full text-left p-4 rounded-2xl border border-emerald-250 bg-emerald-50/30 hover:bg-emerald-50/70 transition-all flex items-start gap-3 active:scale-98"
+                  >
+                    <div className="p-2 bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl shrink-0">
+                      <Video className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-emerald-950">Đăng nhập API chính thức 🎥</p>
+                        {getGoogleMeetToken() && <span className="text-[8px] bg-emerald-600 text-white rounded-md px-1.5 py-0.5 font-bold uppercase tracking-wider shrink-0 scale-90">Đã nối</span>}
+                      </div>
+                      <p className="text-[10px] text-neutral-500 mt-0.5 leading-normal">
+                        Yêu cầu quyền Tài khoản Google của bạn. Tạo không gian họp bảo mật chính thức theo tài khoản với chế độ nâng cao. {user?.isAnonymous && <strong className="text-orange-500">Hỗ trợ nâng cấp tự động từ tài khoản ẩn danh!</strong>}
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setShowMeetSelectionModal(false)}
+                    className="text-xs text-neutral-500 hover:text-neutral-700 font-bold px-3 py-1.5"
+                  >
+                    Đóng
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}

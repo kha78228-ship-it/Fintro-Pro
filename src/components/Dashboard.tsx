@@ -11,7 +11,7 @@ interface DashboardProps {
   transactions: Transaction[];
   onDeleteTransaction: (id: string) => void;
   setCurrentView: (view: any) => void;
-  appTheme?: "vintage" | "vietnam" | "pink_cute";
+  appTheme?: "vintage" | "vietnam" | "pink_cute" | "google_material";
 }
 
 const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, appTheme = "vietnam" }: DashboardProps) => {

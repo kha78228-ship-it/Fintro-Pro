@@ -71,7 +71,13 @@ export default function AIAvatar({ uid, name, photoURL, className = "w-12 h-12 b
             <text x="50" y="50" font-family="Arial, sans-serif" font-size="40" fill="white" font-weight="bold" text-anchor="middle" dy=".3em">${initials}</text>
           </svg>
         `;
-        const newAvatarUrl = `data:image/svg+xml;base64,${btoa(svg)}`;
+        let newAvatarUrl = '';
+        try {
+          newAvatarUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+        } catch (e) {
+          console.error("UTF-8 encoding error, using URL-encoded SVG:", e);
+          newAvatarUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        }
 
         if (newAvatarUrl && mounted) {
           setAvatarUrl(newAvatarUrl);

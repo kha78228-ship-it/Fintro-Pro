@@ -8,6 +8,7 @@ import { db, storage } from '../lib/firebase';
 import { User } from 'firebase/auth';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 interface LoveMemoryProps {
   user?: User | null;
@@ -62,6 +63,7 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
         }
       } catch (err) {
         console.error(err);
+        handleFirestoreError(err, OperationType.GET, user ? `users/${user.uid}/diaries` : 'diaries');
       }
     };
     fetchMemories();
@@ -166,12 +168,59 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
     setNewMemoryPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const [isInitializingSample, setIsInitializingSample] = useState(false);
+
+  const handleCreateSampleMemory = async () => {
+    if (!user) return;
+    setIsInitializingSample(true);
+    const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
+    try {
+      const docRefList = [
+        {
+          title: "Chuyến Đi Đầu Tiên Bên Nhau 🗺️",
+          content: "Hôm nay là chuyến đi dã ngoại đầu tiên của hai đứa mình. Dưới làn gió mát lành và những dải nắng nhẹ nhàng, chúng ta đã cùng nhau trò chuyện hàng giờ, chia sẻ cho nhau những câu chuyện xưa cũ về tuổi thơ, những gánh nặng công việc thường ngày và những ước nguyện ngô nghê cho tương lai.\n\nKhoảnh khắc tớ tựa vào bờ vai vững chãi của cậu bỗng chốc nhận ra thế gian này nhẹ bẫng, dường như mọi giông gió ngoài kia đều bị đẩy lui. Tớ biết từ giây phút này, tớ muốn có cậu đồng hành trên mọi chặng đường tiếp theo. ❤️",
+          date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          photos: [
+            "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&q=80&w=400",
+            "https://images.unsplash.com/photo-1549417229-de67d32e60b6?auto=format&fit=crop&q=80&w=400"
+          ]
+        },
+        {
+          title: "Nắm Tay Nhau Ngắm Hoàng Hôn ☀️",
+          content: "Một buổi chiều vàng ươm dịu ngọt, chúng mình dắt tay nhau đi qua từng góc phố nhỏ rực rỡ nắng thẫm. Cậu khẽ đan ngón tay ấm áp gầy gầy của cậu vào bàn tay tớ, và tớ cảm thấy sự an tâm chảy tràn lấp lánh như nắng chiều thu.\n\nMọi mệt mỏi trong một tuần vất vả đều tan biến đi hết, bỗng nhiên chỉ còn tình yêu đơn sơ nâng niu giữa cuộc sống vội vã.",
+          date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          photos: [
+            "https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&q=80&w=400"
+          ]
+        }
+      ];
+
+      const insertedMemories: any[] = [];
+      for (const item of docRefList) {
+        const docRef = doc(collection(db, memRefStr));
+        const payload = {
+          ...item,
+          createdAt: serverTimestamp()
+        };
+        await setDoc(docRef, payload);
+        insertedMemories.push({ id: docRef.id, ...payload });
+      }
+
+      setMemories(prev => [...insertedMemories, ...prev]);
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, memRefStr);
+    } finally {
+      setIsInitializingSample(false);
+    }
+  };
+
   const handleAddMemory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemoryTitle.trim() || !user) return;
 
+    const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
     try {
-      const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
       const docRef = doc(collection(db, memRefStr));
       const newMemory = {
         title: newMemoryTitle,
@@ -189,17 +238,19 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
       setShowAddMemory(false);
     } catch(err) {
       console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, memRefStr);
     }
   };
 
   const handleDeleteMemory = async (id: string) => {
     if (!user) return; 
+    const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
     try {
-      const memRefStr = sharedFundId ? `couple_data/${sharedFundId}/diaries` : `users/${user.uid}/diaries`;
       await deleteDoc(doc(db, memRefStr, id));
       setMemories(memories.filter(m => m.id !== id));
     } catch(err) {
       console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, `${memRefStr}/${id}`);
     }
   };
 
@@ -459,9 +510,27 @@ export default function LoveMemory({ user }: LoveMemoryProps) {
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {memories.length === 0 && !showAddMemory && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-10 bg-white/50 rounded-3xl border border-dashed border-neutral-300">
-                <BookHeart className="w-12 h-12 text-neutral-300 mx-auto mb-2" />
-                <p className="text-neutral-500">Chưa có kỷ niệm nào được ghi lại.</p>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 px-4 bg-white/50 rounded-3xl border border-dashed border-neutral-300">
+                <BookHeart className="w-14 h-14 text-pink-300 mx-auto mb-3" />
+                <p className="text-neutral-500 mb-4 font-medium">Chưa có kỷ niệm nào được ghi lại.</p>
+                <button
+                  type="button"
+                  onClick={handleCreateSampleMemory}
+                  disabled={isInitializingSample}
+                  className="inline-flex items-center gap-2 bg-pink-500 hover:bg-pink-600 disabled:bg-neutral-300 text-white font-bold px-6 py-2.5 rounded-full text-sm transition-all shadow-md shadow-pink-100"
+                >
+                  {isInitializingSample ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Đang khơi gợi mầm yêu...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Tải kỷ niệm mẫu ngọt ngào ✨
+                    </>
+                  )}
+                </button>
               </motion.div>
             )}
             

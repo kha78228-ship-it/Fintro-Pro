@@ -55,25 +55,39 @@ export function DongSonDrumHUD({ appMode = "finance", graphicsQuality = "high" }
                animate={{ rotate: 360 }}
                transition={{ duration: 90, ease: "linear", repeat: Infinity }}
                className="absolute inset-[0%] m-auto transition-colors duration-1000 opacity-30 pointer-events-none scale-[2]"
-               style={{ color: tertiary, filter: `drop-shadow(0 0 20px ${tertiary}80) blur(2px)`, mixBlendMode: "screen" }}
+               style={{ color: tertiary, filter: `drop-shadow(0 0 15px ${tertiary}60)`, mixBlendMode: "screen" }}
             >
-               <DongSonDrumSvg className="w-full h-full" />
+               <svg viewBox="0 0 1000 1000" className="w-full h-full" stroke="currentColor" fill="none" strokeWidth="1.5">
+                 <circle cx="500" cy="500" r="480" strokeWidth="3" />
+                 <circle cx="500" cy="500" r="430" />
+                 <circle cx="500" cy="500" r="350" strokeDasharray="10, 10" />
+                 <circle cx="500" cy="500" r="270" />
+               </svg>
             </motion.div>
             <motion.div
                animate={{ rotate: -360 }}
                transition={{ duration: 120, ease: "linear", repeat: Infinity }}
-               className="absolute inset-[0%] m-auto transition-colors duration-1000 opacity-15 pointer-events-none scale-[2.5]"
-               style={{ color: secondary, filter: `drop-shadow(0 0 25px ${secondary}66) blur(4px)`, mixBlendMode: "overlay" }}
+               className="absolute inset-[0%] m-auto transition-colors duration-1000 opacity-20 pointer-events-none scale-[2.5]"
+               style={{ color: secondary, filter: `drop-shadow(0 0 20px ${secondary}50)`, mixBlendMode: "overlay" }}
             >
-               <DongSonDrumSvg className="w-full h-full" />
+               <svg viewBox="0 0 1000 1000" className="w-full h-full" stroke="currentColor" fill="none" strokeWidth="1">
+                 <circle cx="500" cy="500" r="470" strokeWidth="2" />
+                 <circle cx="500" cy="500" r="400" strokeDasharray="5, 15" />
+                 <circle cx="500" cy="500" r="310" />
+                </svg>
             </motion.div>
             <motion.div
                animate={{ rotate: 360 }}
                transition={{ duration: 60, ease: "linear", repeat: Infinity }}
-               className="absolute inset-[0%] m-auto transition-colors duration-1000 opacity-10 pointer-events-none scale-[3]"
-               style={{ color: primary, filter: `drop-shadow(0 0 30px ${primary}99) blur(8px)`, mixBlendMode: "lighten" }}
+               className="absolute inset-[0%] m-auto transition-colors duration-1000 opacity-15 pointer-events-none scale-[3]"
+               style={{ color: primary, filter: `drop-shadow(0 0 25px ${primary}70)`, mixBlendMode: "lighten" }}
             >
-               <DongSonDrumSvg className="w-full h-full" />
+               <svg viewBox="0 0 1000 1000" className="w-full h-full" stroke="currentColor" fill="none" strokeWidth="1">
+                 <circle cx="500" cy="500" r="490" />
+                 <circle cx="500" cy="500" r="450" />
+                 <circle cx="500" cy="500" r="360" strokeDasharray="20, 20" />
+                 <circle cx="500" cy="500" r="200" />
+               </svg>
             </motion.div>
           </>
         )}

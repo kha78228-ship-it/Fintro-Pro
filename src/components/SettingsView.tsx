@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
-import { Settings as SettingsIcon, Image as ImageIcon, Layout, Type, Palette, AlertTriangle, Download, MonitorDown, Smartphone, UserCircle, Shield, KeySquare, Copy, Check, Trash2, Bell, DollarSign, Wifi, WifiOff, Database, RefreshCw } from 'lucide-react';
+import { Settings as SettingsIcon, Image as ImageIcon, Layout, Type, Palette, AlertTriangle, Download, MonitorDown, Smartphone, UserCircle, Shield, KeySquare, Copy, Check, Trash2, Bell, DollarSign, Wifi, WifiOff, Database, RefreshCw, Cloud, HardDrive, Upload, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateProfile, User, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -7,6 +7,19 @@ import { db, auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 import { useCurrency, CURRENCIES } from '../lib/CurrencyContext';
 import AIAvatar from './AIAvatar';
+import { 
+  connectGoogleDrive, 
+  disconnectGoogleDrive, 
+  getGoogleDriveToken,
+  setGoogleDriveToken, 
+  uploadFinancialBackup, 
+  uploadDiaryPhotosBackup, 
+  listDriveBackups, 
+  restoreFinancialBackup, 
+  getDriveStorageQuota,
+  DriveBackupFile,
+  DriveQuota
+} from '../lib/driveService';
 
 interface SettingsProps {
   user?: any;
@@ -20,8 +33,8 @@ interface SettingsProps {
   setAccentColor?: (color: string) => void;
   onDeleteData: () => void;
   onDownloadData: () => void;
-  appTheme?: "vintage" | "vietnam" | "pink_cute";
-  setAppTheme?: (theme: "vintage" | "vietnam" | "pink_cute") => void;
+  appTheme?: "vintage" | "vietnam" | "pink_cute" | "google_material";
+  setAppTheme?: (theme: "vintage" | "vietnam" | "pink_cute" | "google_material") => void;
 }
 
 const FONTS = [
@@ -69,6 +82,49 @@ export default memo(function SettingsView({
         window.removeEventListener('offline', handleOffline);
      };
   }, []);
+
+  const [canInstall, setCanInstall] = useState(false);
+  const [isIframe, setIsIframe] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+     setIsIframe(window.self !== window.top);
+     setIsStandalone(window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone === true);
+     
+     // @ts-ignore
+     if (window.deferredPrompt) {
+        setCanInstall(true);
+     }
+
+     const handlePrompt = () => {
+        setCanInstall(true);
+     };
+
+     window.addEventListener('beforeinstallprompt', handlePrompt);
+     return () => window.removeEventListener('beforeinstallprompt', handlePrompt);
+  }, []);
+
+  const handleOpenInNewTab = () => {
+     window.open(window.location.href, "_blank");
+  };
+
+  const handleNativeInstall = () => {
+     // @ts-ignore
+     const promptEvent = window.deferredPrompt;
+     if (promptEvent) {
+        promptEvent.prompt();
+        promptEvent.userChoice.then((choiceResult: any) => {
+           if (choiceResult.outcome === "accepted") {
+              // @ts-ignore
+              window.deferredPrompt = null;
+              setCanInstall(false);
+              alert("Cài đặt thành công! Cảm ơn bạn.");
+           }
+        });
+     } else {
+        alert("Hiện tại hệ thống chưa sẵn sàng kích hoạt tự động. Bạn hãy click trực tiếp vào nút 'Cài đặt' (Hình chiếc máy tính có mũi tên xuống) trên thanh địa chỉ của trình duyệt.");
+     }
+  };
   
   // Account settings
   const [displayName, setDisplayName] = useState('');
@@ -98,6 +154,140 @@ export default memo(function SettingsView({
   const [sysAnnounceSize, setSysAnnounceSize] = useState(16);
   const [isAnnounceActive, setIsAnnounceActive] = useState(false);
 
+  // Google Drive backup states
+  const [driveToken, setDriveTokenState] = useState<string | null>(getGoogleDriveToken());
+  const [isDriveConnecting, setIsDriveConnecting] = useState(false);
+  const [driveQuota, setDriveQuota] = useState<DriveQuota | null>(null);
+  const [driveBackups, setDriveBackups] = useState<DriveBackupFile[]>([]);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState('');
+
+  // Loading status
+  const [isBackingUpFinancials, setIsBackingUpFinancials] = useState(false);
+  const [isBackingUpPhotos, setIsBackingUpPhotos] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState<{ current: number; total: number; fileName: string; isSkipped: boolean } | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<{ backupId: string; loading: boolean; success?: boolean; error?: string } | null>(null);
+
+  // Google Drive backup UX triggers
+  const handleConnectDrive = async () => {
+    setIsDriveConnecting(true);
+    try {
+      const result = await connectGoogleDrive();
+      if (result) {
+        setDriveTokenState(result.accessToken);
+        alert('Kết nối Google Drive thành công!');
+      }
+    } catch (err: any) {
+      alert(`Kết nối thất bại: ${err.message || err}`);
+    } finally {
+      setIsDriveConnecting(false);
+    }
+  };
+
+  const handleDisconnectDrive = () => {
+    if (confirm('Bạn có chắc chắn muốn ngắt kết nối với Google Drive?')) {
+      disconnectGoogleDrive();
+      setDriveTokenState(null);
+      setDriveQuota(null);
+      setDriveBackups([]);
+    }
+  };
+
+  const handleToggleAutoBackup = async (checked: boolean) => {
+    if (!user) return;
+    try {
+      setAutoBackupEnabled(checked);
+      await setDoc(doc(db, 'users', user.uid), {
+        driveAutoBackupEnabled: checked
+      }, { merge: true });
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi khi lưu cài đặt sao lưu tự động.');
+    }
+  };
+
+  const handleBackupFinancials = async () => {
+    if (!driveToken || !user) return;
+    setIsBackingUpFinancials(true);
+    try {
+      const file = await uploadFinancialBackup(driveToken, user.uid, user.email || '');
+      setLastBackupTime(file.createdTime);
+      
+      // Refresh list & quota
+      const updatedBackups = await listDriveBackups(driveToken);
+      setDriveBackups(updatedBackups);
+      const updatedQuota = await getDriveStorageQuota(driveToken);
+      setDriveQuota(updatedQuota);
+      alert('Sao lưu báo cáo tài chính lên Google Drive thành công!');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Sao lưu báo cáo tài chính thất bại: ${err.message || err}`);
+    } finally {
+      setIsBackingUpFinancials(false);
+    }
+  };
+
+  const handleBackupPhotos = async () => {
+    if (!driveToken || !user) return;
+    setIsBackingUpPhotos(true);
+    setPhotoProgress({ current: 0, total: 0, fileName: 'Chuẩn bị danh sách chụp...', isSkipped: false });
+    try {
+      const stats = await uploadDiaryPhotosBackup(driveToken, user.uid, (fileName, index, total, isSkipped) => {
+        setPhotoProgress({ current: index, total, fileName, isSkipped });
+      });
+      
+      const updatedBackups = await listDriveBackups(driveToken);
+      setDriveBackups(updatedBackups);
+      const updatedQuota = await getDriveStorageQuota(driveToken);
+      setDriveQuota(updatedQuota);
+      
+      alert(`Đồng bộ ảnh hoàn tất! Đã tải lên ${stats.uploaded} ảnh mới, bỏ qua ${stats.skipped} ảnh đã tồn hành trên Drive.`);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Đồng bộ ảnh thất bại: ${err.message || err}`);
+    } finally {
+      setIsBackingUpPhotos(false);
+      setPhotoProgress(null);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string, backupName: string) => {
+    if (!driveToken || !user) return;
+    const confirmed = window.confirm(`CẢNH BÁO CỰC KỲ QUAN TRỌNG:\n\nBạn có chắc chắn muốn KHÔI PHỤC dữ liệu từ bản sao lưu '${backupName}'?\n\nThao tác này sẽ tải dữ liệu tài chính từ Google Drive và ghi đè / sáp nhập trực tiếp vào hệ thống hiện tại của bạn. Thao tác không thể hoàn tác.`);
+    if (!confirmed) return;
+
+    setRestoreStatus({ backupId, loading: true });
+    try {
+      await restoreFinancialBackup(driveToken, backupId, user.uid);
+      setRestoreStatus({ backupId, loading: false, success: true });
+      alert('Khôi phục dữ liệu tài chính thành công! Ứng dụng sẽ tự động tải lại để cài đặt bảng dữ liệu mới.');
+      window.location.reload();
+    } catch (err: any) {
+      console.error(err);
+      setRestoreStatus({ backupId, loading: false, error: err.message || 'Lỗi không xác định' });
+      alert(`Khôi phục dữ liệu thất bại: ${err.message || err}`);
+    }
+  };
+
+  const handleRefreshDriveInfo = async () => {
+    if (!driveToken) return;
+    try {
+      const updatedQuota = await getDriveStorageQuota(driveToken);
+      setDriveQuota(updatedQuota);
+      const updatedBackups = await listDriveBackups(driveToken);
+      setDriveBackups(updatedBackups);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (driveToken) {
+      getDriveStorageQuota(driveToken).then(setDriveQuota);
+      listDriveBackups(driveToken).then(setDriveBackups);
+    }
+  }, [driveToken]);
+
   useEffect(() => {
      const interval = setInterval(() => setNow(Date.now()), 1000);
      return () => clearInterval(interval);
@@ -118,6 +308,8 @@ export default memo(function SettingsView({
              setGender(data.gender || '');
              setIsCycleVisibleToPartner(data.isCycleVisibleToPartner || false);
              setRoomCode(data.friendCode || '');
+             setAutoBackupEnabled(data.driveAutoBackupEnabled || false);
+             setLastBackupTime(data.driveLastBackupTime || '');
            }
         });
 
@@ -346,6 +538,12 @@ export default memo(function SettingsView({
          <button onClick={() => setActiveTab('data')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'data' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
            <Download className="w-4 h-4" /> Dữ liệu & Ngoại tuyến
          </button>
+         <button onClick={() => setActiveTab('drive')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'drive' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
+            <Cloud className="w-4 h-4" /> Sao lưu Google Drive
+         </button>
+         <button onClick={() => setActiveTab('pwa')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'pwa' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
+           <MonitorDown className="w-4 h-4" /> Tải & Cài Đặt App
+         </button>
          <button onClick={() => setActiveTab('system')} className={`whitespace-nowrap px-6 py-3.5 rounded-3xl uppercase tracking-widest text-[10px] font-bold transition-colors flex items-center gap-2 border border-neo-dark ${activeTab === 'system' ? 'bg-neo-dark text-neo-light' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}>
            <Bell className="w-4 h-4" /> Hệ thống
          </button>
@@ -485,6 +683,13 @@ export default memo(function SettingsView({
                       >
                         Hường Dễ Thương
                         {appTheme === 'pink_cute' && <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => setAppTheme('google_material')}
+                        className={`text-[10px] uppercase font-bold py-3.5 px-4 rounded-3xl border border-neo-dark transition-all text-left flex justify-between items-center ${appTheme === 'google_material' ? 'bg-neo-orange text-white' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}
+                      >
+                        Google Material
+                        {appTheme === 'google_material' && <Check className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
@@ -726,62 +931,6 @@ export default memo(function SettingsView({
                   </button>
                 </div>
               </div>
-
-              <div>
-                <h4 className="font-bold text-neutral-900 mb-4 flex items-center justify-between">
-                  Cài đặt App Độc Lập
-                  <span className="text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2.5 py-1 rounded-3xl uppercase tracking-wider">Cloud App</span>
-                </h4>
-                
-                <div className="bg-neo-bg border border-neutral-100/50 rounded-3xl p-6 mb-4 relative overflow-hidden">
-                  <div className="absolute -right-6 -top-6 w-12 h-12 bg-neutral-100 rounded-full blur-2xl pointer-events-none" />
-                  <div className="flex items-start gap-4 mb-4 relative z-10">
-                    <div className="w-10 h-10 rounded-full shadow-sm border border-neutral-50 flex items-center justify-center shrink-0">
-                      <Smartphone className="w-7 h-7 text-neutral-600" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-neutral-950 text-lg leading-tight">Fintro App</h5>
-                      <p className="text-xs font-semibold text-neutral-600 mt-1 uppercase tracking-wider">iOS • Android • macOS • Windows</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3 mb-6 relative z-10 text-neutral-800 font-sans">
-                    <div className="flex items-start gap-3 text-sm text-neutral-900/80">
-                      <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><Check className="w-3 h-3" /></div>
-                      <p className="leading-snug">Hoạt động như một ứng dụng cài đặt mượt mà trên thiết bị không thông qua cửa hàng ứng dụng.</p>
-                    </div>
-                    <div className="flex items-start gap-3 text-sm text-neutral-900/80">
-                      <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 text-neutral-600 mt-0.5"><Check className="w-3 h-3" /></div>
-                      <p className="leading-snug"><strong>Khả năng offline vượt trội:</strong> Nhờ công nghệ PWA & CSDL offline, bạn có thể xem lại dữ liệu tài chính cũ và thêm mới giao dịch bình thường khi mất mạng.</p>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                      if (window.self !== window.top) {
-                        alert('⚠️ Bạn đang dùng bản xem trước, vui lòng nhấn "Open in new tab" ở góc trên bên phải để bắt đầu tải app.');
-                        return;
-                      }
-                      // @ts-ignore
-                      const promptEvent = window.deferredPrompt;
-                      if (promptEvent) {
-                        promptEvent.prompt();
-                        promptEvent.userChoice.then((choiceResult: any) => {
-                          console.log(choiceResult.outcome);
-                          // @ts-ignore
-                          window.deferredPrompt = null;
-                        });
-                      } else {
-                          alert('Để tải ứng dụng:\n\n• Trên Safari (iOS): Nhấn nút Chia Sẻ (vuông có mũi tên lên) ở dưới cùng màn hình -> Chọn "Thêm vào MH chính" (Add to Home Screen).\n\n• Trên Chrome (Android): Nhấn nút Menu (3 chấm) ở góc phải -> Chọn "Thêm vào Màn hình chính" hoặc "Cài đặt ứng dụng".');
-                      }
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-neutral-900 hover:bg-neutral-800 text-white font-bold rounded-3xl shadow-lg transition-all relative z-10 active:scale-95 cursor-pointer"
-                  >
-                    <Download className="w-5 h-5 shrink-0" />
-                    Cài Đặt Lên Màn Hình Chính (PWA)
-                  </button>
-                </div>
-              </div>
             </div>
 
             <div className="pt-6 border-t border-orange-100">
@@ -817,6 +966,129 @@ export default memo(function SettingsView({
                      Xóa toàn bộ dữ liệu giao dịch
                    </button>
                  )}
+               </div>
+            </div>
+         </motion.div>
+      )}
+      {activeTab === 'pwa' && (
+         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 max-w-2xl">
+            <div className="card p-8 space-y-6">
+               <div className="flex items-center gap-3 border-b border-neutral-100 pb-4">
+                  <MonitorDown className="w-5 h-5 text-orange-500" />
+                  <h3 className="text-lg font-bold text-neutral-900">Tải & Cài Đặt Ứng Dụng (PWA)</h3>
+               </div>
+
+               {isStandalone ? (
+                  <div className="p-6 bg-teal-50 border border-teal-150 rounded-3xl flex items-center gap-4 text-teal-850">
+                     <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold text-lg shrink-0">✓</div>
+                     <div>
+                        <p className="font-bold text-sm">Bạn đang sử dụng phiên bản App chính thức!</p>
+                        <p className="text-xs text-teal-600 mt-1">Ứng dụng đã được cài đặt hoàn tất và đang hoạt động độc lập với đầy đủ tính năng ưu việt.</p>
+                     </div>
+                  </div>
+               ) : isIframe ? (
+                  <div className="p-6 bg-amber-50 border border-amber-200 rounded-3xl space-y-4">
+                     <div className="flex items-start gap-3.5">
+                        <div className="p-2 bg-amber-100 text-amber-700 rounded-2xl shrink-0">
+                           <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        <div>
+                           <h4 className="text-sm font-bold text-amber-900">Bị chặn bởi khung bảo mật do chạy trong Google AI Studio</h4>
+                           <p className="text-xs text-amber-700 leading-relaxed mt-1">
+                              Trình duyệt web chặn tính năng pop-up tải PWA trực tiếp khi ứng dụng chạy bên trong khung xem trước (iframe) của AI Studio. Để tải app về máy, bạn cần chạy app ở một tab trình duyệt riêng biệt.
+                           </p>
+                        </div>
+                     </div>
+                     <div className="pt-2">
+                        <button 
+                           onClick={handleOpenInNewTab}
+                           className="w-full flex items-center justify-center gap-2 py-3 px-6 bg-neo-dark hover:bg-neo-dark/95 text-white font-bold text-sm rounded-3xl shadow-sm transition-all active:scale-95 cursor-pointer"
+                        >
+                           <MonitorDown className="w-4 h-4" />
+                           <span>Nhấp Vào Đây Để Mở Tab Riêng & Tải App</span>
+                        </button>
+                        <p className="text-[10px] text-center text-neutral-400 mt-2 italic">
+                           * Trình duyệt sẽ hiện nút Cài đặt ngay sau khi bạn mở ứng dụng ở tab mới!
+                        </p>
+                     </div>
+                  </div>
+               ) : (
+                  <div className="space-y-4">
+                     <div className="p-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-3xl space-y-4">
+                        <div className="flex items-start gap-4">
+                           <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 border border-orange-200">
+                              <MonitorDown className="w-6 h-6 animate-bounce" />
+                           </div>
+                           <div>
+                              <h4 className="text-sm font-bold text-neutral-950">Gói cài đặt tự động đã sẵn sàng!</h4>
+                              <p className="text-xs text-neutral-600 leading-relaxed mt-1">
+                                 Hệ thống hỗ trợ cài đặt trực tiếp cực kỳ an toàn. Chạy độc lập, tương thích mượt mảng hoàn hảo cả trên điện thoại lẫn máy tính.
+                              </p>
+                           </div>
+                        </div>
+                        
+                        <button 
+                           onClick={canInstall ? handleNativeInstall : () => {
+                              alert("Cấu hình cài đặt đang được tải. Bạn cũng có thể click trực tiếp vào nút 'Cài đặt' (Hình chiếc màn hình kèm mũi tên tải xuống) xuất hiện bên tay phải thanh nhập link (địa chỉ URL) của trình duyệt.");
+                           }}
+                           className="w-full flex items-center justify-center gap-2 py-3.5 px-6 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-sm rounded-3xl shadow-md transition-all active:scale-95 cursor-pointer"
+                        >
+                           <Download className="w-4 h-4" />
+                           <span>Cài Đặt App Trực Tiếp Lên Thiết Bị</span>
+                        </button>
+                     </div>
+                  </div>
+               )}
+
+               {/* Hướng dẫn thủ công */}
+               <div className="space-y-4 pt-2">
+                  <h4 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+                     <span className="w-1.5 h-3.5 bg-orange-500 rounded-full inline-block"></span>
+                     Cách tải thủ công cho từng hệ điều hành
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                     <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-150 text-[11px] text-neutral-600 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-neutral-800 border-b border-neutral-100 pb-2 mb-1">
+                           <Smartphone className="w-4 h-4 text-orange-600" />
+                           iOS (iPhone / iPad)
+                        </div>
+                        <p>1. Nhấp nút mở tab mới để chạy app trên trình duyệt <strong>Safari</strong>.</p>
+                        <p>2. Chạm vào biểu tượng <strong>Chia sẻ (Share)</strong> ở dưới cùng màn hình.</p>
+                        <p>3. Cuộn xuống và chọn <strong>Thêm vào MH chính (Add to Home Screen)</strong>.</p>
+                     </div>
+
+                     <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-150 text-[11px] text-neutral-600 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-neutral-800 border-b border-neutral-100 pb-2 mb-1">
+                           <Smartphone className="w-4 h-4 text-orange-600" />
+                           Điện thoại Android
+                        </div>
+                        <p>1. Chạy app trên trình duyệt <strong>Google Chrome</strong> ở tab mới.</p>
+                        <p>2. Chọn biểu tượng <strong>3 chấm ở góc trên đứng</strong> thanh địa chỉ.</p>
+                        <p>3. Tìm kích hoạt mục <strong>Cài đặt ứng dụng</strong> (hoặc Thêm vào MH chính).</p>
+                     </div>
+
+                     <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-150 text-[11px] text-neutral-600 space-y-2">
+                        <div className="flex items-center gap-2 font-bold text-neutral-800 border-b border-neutral-100 pb-2 mb-1">
+                           <MonitorDown className="w-4 h-4 text-orange-600" />
+                           Máy tính (PC/Mac)
+                        </div>
+                        <p>1. Chạy app trên trình duyệt <strong>Chrome / Edge / Brave</strong> tab mới.</p>
+                        <p>2. Nhìn lên góc phải thanh URL, bạn sẽ thấy <strong>biểu tượng Tải xuống / Cài đặt</strong>.</p>
+                        <p>3. Chọn cài đặt để đưa App ngoài màn hình Desktop.</p>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Ưu điểm nổi bật */}
+               <div className="bg-neutral-50 p-5 rounded-3xl border border-neutral-200/50 space-y-3">
+                  <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">Ưu điểm cực lớn giống Google AI Studio</h4>
+                  <ul className="text-xs text-neutral-600 space-y-2 list-disc list-inside leading-relaxed">
+                     <li><strong>Toàn màn hình (Standalone)</strong>: Cho cảm giác mượt mà y hệt như ứng dụng tải trên AppStore hay CH Play.</li>
+                     <li><strong>Tốc độ nhảy vọt</strong>: Dữ liệu tải trước cục bộ tăng tốc ứng dụng cực nhanh.</li>
+                     <li><strong>Lưu trữ Offline</strong>: Nhập và theo dõi lịch trình, chi tiêu, công việc thoải mái không cần sợ đứt mạng.</li>
+                     <li><strong>Tính tiện lợi cực cao</strong>: Có Icon riêng, mở cực nhanh từ màn hình điện thoại hay máy tính PC của bạn.</li>
+                  </ul>
                </div>
             </div>
          </motion.div>
@@ -1035,6 +1307,270 @@ export default memo(function SettingsView({
             )}
                </>
             )}
+         </motion.div>
+      )}
+      {activeTab === 'drive' && (
+         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            {/* GOOGLE DRIVE SYNC CARD */}
+            <div className="card p-8 max-w-4xl space-y-6">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-neutral-100 pb-6">
+                 <div className="flex items-center gap-3">
+                   <div className="p-3 bg-blue-50 text-blue-600 rounded-3xl">
+                     <Cloud className="w-6 h-6" />
+                   </div>
+                   <div>
+                     <h3 className="text-xl font-bold text-neutral-900">Sao lưu đám mây với Google Drive</h3>
+                     <p className="text-sm text-neutral-500 mt-1">Đồng bộ tự động hoặc thủ công hình ảnh nhật ký và báo cáo tài chính lên Google Drive của bạn.</p>
+                   </div>
+                 </div>
+                 {driveToken && (
+                   <button 
+                     onClick={handleDisconnectDrive}
+                     className="px-4 py-2 text-xs font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded-3xl transition-colors shrink-0"
+                   >
+                     Ngắt kết nối
+                   </button>
+                 )}
+              </div>
+
+              {!isOnline && (
+                <div className="p-4 bg-orange-50 border border-orange-100 text-orange-800 rounded-3xl flex items-center gap-3 text-sm">
+                   <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0" />
+                   <span>Vui lòng kiểm tra kết nối mạng. Bạn cần kết nối Internet để thiết lập hoặc sao lưu lên Google Drive.</span>
+                </div>
+              )}
+
+              {!driveToken ? (
+                // NOT CONNECTED VIEW
+                <div className="py-8 px-4 text-center max-w-xl mx-auto space-y-6">
+                  <div className="relative w-20 h-20 bg-neutral-50 rounded-full flex items-center justify-center mx-auto border border-neutral-100">
+                    <Cloud className="w-10 h-10 text-neutral-400" />
+                    <Upload className="w-5 h-5 text-blue-500 absolute bottom-1 right-1" />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-neutral-800 text-lg">Liên kết tài khoản Drive của bạn</h4>
+                    <p className="text-sm text-neutral-500">
+                      Tất cả báo cáo thu chi, phân tích tài chính và ảnh kỷ niệm nhật ký sẽ được tự động/thủ công lưu trữ an toàn trong một thư mục riêng biệt <strong>'Fintro_Backups'</strong> trong Google Drive cá nhân. Bạn có thể khôi phục lại dữ liệu bất cứ lúc nào trên thiết bị mới!
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      disabled={isDriveConnecting || !isOnline}
+                      onClick={handleConnectDrive}
+                      className="inline-flex items-center gap-3 bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-700 font-bold px-6 py-3 rounded-3xl transition-all shadow-sm disabled:opacity-50"
+                    >
+                      {isDriveConnecting ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin text-neutral-500" />
+                          <span>Đang kết nối...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"></path>
+                            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"></path>
+                            <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.08H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.92l2.85-2.22.81-.6z"></path>
+                            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.08l3.66 2.84c.87-2.6 3.3-4.54 6.16-4.54z"></path>
+                          </svg>
+                          <span>Kết nối với Google Drive</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // CONNECTED VIEW
+                <div className="space-y-6">
+                  {/* Quota Check */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-100 flex flex-col justify-between">
+                      <span className="text-xs font-semibold uppercase text-neutral-500 tracking-wider">Trạng thái liên kết</span>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
+                        <span className="font-bold text-neutral-800">Đã kết nối</span>
+                      </div>
+                      <span className="text-[10px] text-neutral-400 mt-1 truncate">{user?.email}</span>
+                    </div>
+
+                    <div className="p-5 bg-neutral-50 rounded-3xl border border-neutral-100 flex flex-col justify-between md:col-span-2">
+                      <div className="flex justify-between items-center pb-1">
+                        <span className="text-xs font-semibold uppercase text-neutral-500 tracking-wider flex items-center gap-1.5">
+                          <HardDrive className="w-3.5 h-3.5" /> Dung lượng Google Drive
+                        </span>
+                        {driveQuota && (
+                          <span className="font-mono text-xs font-bold text-neutral-700">
+                            {Math.round(Number(driveQuota.usage) / 1024 / 1024 / 1024 * 100) / 100} GB / {Math.round(Number(driveQuota.limit) / 1024 / 1024 / 1024)} GB
+                          </span>
+                        )}
+                      </div>
+                      
+                      {driveQuota ? (
+                        <div>
+                          <div className="w-full h-3 bg-neutral-200 rounded-full mt-2 overflow-hidden border border-neutral-100">
+                            <div 
+                              className="h-full bg-blue-500 transition-all duration-500" 
+                              style={{ width: `${Math.min(100, (Number(driveQuota.usage) / Number(driveQuota.limit)) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-neutral-400 mt-1.5 block">
+                            Đã sử dụng {Math.round((Number(driveQuota.usage) / Number(driveQuota.limit)) * 10000) / 100}% dung lượng tổng có sẵn.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="w-full h-3 bg-neutral-100 animate-pulse rounded-full mt-2" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Auto-backup trigger controls */}
+                  <div className="p-6 bg-blue-50/50 border border-blue-100/60 rounded-3xl space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block font-display">Cloud Backup</span>
+                        <h4 className="font-bold text-neutral-950 text-base">Tự động sao lưu lên đám mây</h4>
+                        <p className="text-xs text-neutral-500">Đồng bộ tự động báo cáo mới nhất mỗi khi tải ứng dụng.</p>
+                      </div>
+                      <button 
+                         onClick={() => handleToggleAutoBackup(!autoBackupEnabled)}
+                         className={`w-14 h-8 rounded-full transition-all flex items-center p-1.5 border ${autoBackupEnabled ? 'bg-blue-600 border-blue-700 justify-end' : 'bg-neutral-200 border-neutral-300 justify-start'}`}
+                      >
+                         <motion.div layout className="w-5 h-5 rounded-full bg-white shadow-sm" />
+                      </button>
+                    </div>
+                    {lastBackupTime && (
+                      <div className="text-xs text-neutral-500 flex items-center gap-1 font-mono pt-1 border-t border-blue-100/50">
+                        <span>Lần sao lưu cuối:</span>
+                        <span className="font-bold text-neutral-800">{new Date(lastBackupTime).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manual backup execution buttons */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Hành động sao lưu thủ công</h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Financials card */}
+                      <div className="p-6 bg-white border border-neutral-200 rounded-3xl flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="space-y-2">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Hợp phần tài chính</span>
+                          <h5 className="font-bold text-neutral-900 text-base">Báo cáo & Thu chi</h5>
+                          <p className="text-xs text-neutral-500">Đóng gói toàn bộ Giao dịch, Ngân sách, Các khoản nợ, Mục tiêu và Đăng ký thành file JSON đưa lên Drive.</p>
+                        </div>
+                        <div className="pt-6">
+                          <button
+                            disabled={isBackingUpFinancials}
+                            onClick={handleBackupFinancials}
+                            className="w-full bg-neutral-900 border border-neutral-950 hover:bg-neutral-800 text-white font-bold py-3 px-4 rounded-3xl transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {isBackingUpFinancials ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                                <span>Đang gói & tải...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-4 h-4" />
+                                <span>Sao lưu tài chính</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Photo diary card */}
+                      <div className="p-6 bg-white border border-neutral-200 rounded-3xl flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="space-y-2">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">Hình ảnh kỷ niệm</span>
+                          <h5 className="font-bold text-neutral-900 text-base">Album ảnh nhật ký</h5>
+                          <p className="text-xs text-neutral-500">Đồng bộ tất cả ảnh nhật ký bạn đã chụp hoặc tải lên. Sử dụng công nghệ so khớp thông minh, tự bỏ qua ảnh cũ.</p>
+                        </div>
+                        {photoProgress && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-[10px] font-mono font-semibold text-neutral-500">
+                              <span className="truncate max-w-[150px]">{photoProgress.fileName}</span>
+                              <span>{photoProgress.current}/{photoProgress.total}</span>
+                            </div>
+                            <div className="w-full bg-neutral-100 h-1.5 rounded-full overflow-hidden border border-neutral-200">
+                              <div className="h-full bg-blue-500" style={{ width: `${(photoProgress.current / photoProgress.total) * 100}%` }} />
+                            </div>
+                          </div>
+                        )}
+                        <div className="pt-6">
+                          <button
+                            disabled={isBackingUpPhotos}
+                            onClick={handleBackupPhotos}
+                            className="w-full bg-neutral-600 border border-neutral-700 hover:bg-neutral-700 text-white font-bold py-3 px-4 rounded-3xl transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {isBackingUpPhotos ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                                <span>Đang đồng bộ ảnh...</span>
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="w-4 h-4" />
+                                <span>Đồng bộ ảnh nhật ký</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Backup History Listings */}
+                  <div className="space-y-3 pt-4 border-t border-neutral-100">
+                    <div className="flex items-center justify-between pb-1">
+                      <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Lịch sử bản sao lưu trên Drive</h4>
+                      <button 
+                        onClick={handleRefreshDriveInfo} 
+                        className="text-neutral-500 hover:text-neutral-800 p-1 rounded-full transition-colors"
+                        title="Tải lại danh sách"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {driveBackups.filter(b => b.name.endsWith('.json')).map((b) => {
+                        const isRestoring = restoreStatus?.backupId === b.id && restoreStatus?.loading;
+                        return (
+                          <div key={b.id} className="p-4 bg-white border border-neutral-200 rounded-3xl flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center shrink-0">
+                                <Database className="w-5 h-5 font-bold" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-neutral-800 text-sm block truncate" title={b.name}>{b.name}</span>
+                                <span className="text-[10px] text-neutral-400 font-mono block">
+                                  Tạo ngày: {new Date(b.createdTime).toLocaleString()} | Kích thước: {Math.round(Number(b.size || 0) / 10.24) / 100} KB
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              disabled={isRestoring}
+                              onClick={() => handleRestoreBackup(b.id, b.name)}
+                              className="px-4 py-2 text-xs font-bold text-stone-700 border border-neutral-300 hover:bg-neutral-50 rounded-3xl transition-colors shrink-0 disabled:opacity-50"
+                            >
+                              {isRestoring ? 'Đang khôi phục...' : 'Phục hồi'}
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {driveBackups.filter(b => b.name.endsWith('.json')).length === 0 && (
+                        <div className="text-center py-8 bg-neutral-50 rounded-3xl border border-neutral-100 border-dashed">
+                          <Cloud className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                          <p className="text-xs font-medium text-neutral-500">Chưa có bản sao lưu tài chính nào trực tuyến.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
          </motion.div>
       )}
       </AnimatePresence>

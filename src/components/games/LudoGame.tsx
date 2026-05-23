@@ -54,6 +54,64 @@ const initHorses = (colors: PlayerColor[]): Horse[] => {
   return h;
 };
 
+const StaticLudoBoard = React.memo(() => {
+  return (
+    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: 'repeat(15, 1fr)', gridTemplateRows: 'repeat(15, 1fr)', gap: '1px', backgroundColor: '#e5e5e5' }}>
+      {/* Draw 15x15 Grid */}
+      {Array.from({ length: 225 }).map((_, i) => {
+        const x = i % 15;
+        const y = Math.floor(i / 15);
+        const isRedHome = x < 6 && y < 6;
+        const isGreenHome = x > 8 && y < 6;
+        const isBlueHome = x > 8 && y > 8;
+        const isYellowHome = x < 6 && y > 8;
+        
+        let bg = "bg-neutral-50";
+        if (isRedHome) bg = "bg-orange-100 border-r-2 border-b-2 border-orange-200/50";
+        if (isGreenHome) bg = "bg-neutral-100 border-l-2 border-b-2 border-neutral-200/50";
+        if (isBlueHome) bg = "bg-neutral-100 border-l-2 border-t-2 border-neutral-200/50";
+        if (isYellowHome) bg = "bg-orange-100 border-r-2 border-t-2 border-orange-200/50";
+
+        // Center 3x3
+        if (x >= 6 && x <= 8 && y >= 6 && y <= 8) bg = "bg-neutral-900 border border-neutral-950";
+
+        // Track colors
+        if (x === 1 && y === 6) bg = "bg-orange-400 flex items-center justify-center";
+        if (y === 7 && x > 0 && x < 6) bg = "bg-orange-200/60";
+        
+        if (x === 8 && y === 1) bg = "bg-neutral-400 flex items-center justify-center";
+        if (x === 7 && y > 0 && y < 6) bg = "bg-neutral-200/60";
+
+        if (x === 13 && y === 8) bg = "bg-neutral-400 flex items-center justify-center";
+        if (y === 7 && x > 8 && x < 14) bg = "bg-neutral-200/60";
+
+        if (x === 6 && y === 13) bg = "bg-orange-400 flex items-center justify-center";
+        if (x === 7 && y > 8 && y < 14) bg = "bg-orange-200/60";
+
+        const isStartSpot = (x===1&&y===6) || (x===8&&y===1) || (x===13&&y===8) || (x===6&&y===13);
+        const isSafeSpot = (x===6&&y===2) || (x===12&&y===6) || (x===8&&y===12) || (x===2&&y===8);
+        if (isSafeSpot) bg = "bg-neutral-300 flex items-center justify-center";
+
+        // Draw the home circles
+        let circle = null;
+        if (isRedHome && x === 3 && y === 3) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-orange-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-orange-100/50" /></div>;
+        if (isGreenHome && x === 11 && y === 3) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-neutral-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-neutral-100/50" /></div>;
+        if (isBlueHome && x === 11 && y === 11) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-neutral-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-neutral-100/50" /></div>;
+        if (isYellowHome && x === 3 && y === 11) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-orange-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-orange-100/50" /></div>;
+
+        return (
+          <div key={i} className={`w-full h-full relative overflow-hidden flex items-center justify-center ${bg}`} style={{ gridColumn: x+1, gridRow: y+1 }}>
+             {isStartSpot && <Star className="w-3/5 h-3/5 text-white/60 fill-current drop-shadow-sm" />}
+             {isSafeSpot && <Star className="w-3/5 h-3/5 text-neutral-500/30 fill-current" />}
+             {circle}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+StaticLudoBoard.displayName = 'StaticLudoBoard';
+
 import GameInviteModal from './GameInviteModal';
 
 export default function LudoGame({ user, onExit }: LudoGameProps) {
@@ -476,57 +534,7 @@ export default function LudoGame({ user, onExit }: LudoGameProps) {
         {/* Ludo Board */}
         <div className="w-full max-w-[500px] mt-4 sm:mt-0 p-4 sm:p-6 relative z-10">
             <div className="relative w-full rounded-3xl overflow-hidden border-[14px] border-neutral-800 shadow-[0_20px_60px_-15px_rgba(0,0,0,1)] bg-neutral-100 ring-4 ring-neutral-900 ring-offset-4 ring-offset-neutral-800" style={{ paddingTop: '100%' }}>
-                <div className="absolute inset-0 grid" style={{ gridTemplateColumns: 'repeat(15, 1fr)', gridTemplateRows: 'repeat(15, 1fr)', gap: '1px', backgroundColor: '#e5e5e5' }}>
-                    {/* Draw 15x15 Grid */}
-                    {Array.from({ length: 225 }).map((_, i) => {
-                    const x = i % 15;
-                    const y = Math.floor(i / 15);
-                    const isRedHome = x < 6 && y < 6;
-                    const isGreenHome = x > 8 && y < 6;
-                    const isBlueHome = x > 8 && y > 8;
-                    const isYellowHome = x < 6 && y > 8;
-                    
-                    let bg = "bg-neutral-50";
-                    if (isRedHome) bg = "bg-orange-100 border-r-2 border-b-2 border-orange-200/50";
-                    if (isGreenHome) bg = "bg-neutral-100 border-l-2 border-b-2 border-neutral-200/50";
-                    if (isBlueHome) bg = "bg-neutral-100 border-l-2 border-t-2 border-neutral-200/50";
-                    if (isYellowHome) bg = "bg-orange-100 border-r-2 border-t-2 border-orange-200/50";
-
-                    // Center 3x3
-                    if (x >= 6 && x <= 8 && y >= 6 && y <= 8) bg = "bg-neutral-900 border border-neutral-950";
-
-                    // Track colors
-                    if (x === 1 && y === 6) bg = "bg-orange-400 flex items-center justify-center";
-                    if (y === 7 && x > 0 && x < 6) bg = "bg-orange-200/60";
-                    
-                    if (x === 8 && y === 1) bg = "bg-neutral-400 flex items-center justify-center";
-                    if (x === 7 && y > 0 && y < 6) bg = "bg-neutral-200/60";
-
-                    if (x === 13 && y === 8) bg = "bg-neutral-400 flex items-center justify-center";
-                    if (y === 7 && x > 8 && x < 14) bg = "bg-neutral-200/60";
-
-                    if (x === 6 && y === 13) bg = "bg-orange-400 flex items-center justify-center";
-                    if (x === 7 && y > 8 && y < 14) bg = "bg-orange-200/60";
-
-                    const isStartSpot = (x===1&&y===6) || (x===8&&y===1) || (x===13&&y===8) || (x===6&&y===13);
-                    const isSafeSpot = (x===6&&y===2) || (x===12&&y===6) || (x===8&&y===12) || (x===2&&y===8);
-                    if (isSafeSpot) bg = "bg-neutral-300 flex items-center justify-center";
-
-                    // Draw the home circles
-                    let circle = null;
-                    if (isRedHome && x === 3 && y === 3) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-orange-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-orange-100/50" /></div>;
-                    if (isGreenHome && x === 11 && y === 3) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-neutral-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-neutral-100/50" /></div>;
-                    if (isBlueHome && x === 11 && y === 11) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-neutral-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-neutral-100/50" /></div>;
-                    if (isYellowHome && x === 3 && y === 11) circle = <div className="absolute w-[200%] h-[200%] -left-[50%] -top-[50%] rounded-3xl bg-orange-500/20 shadow-inner flex items-center justify-center"><div className="w-[60%] h-[60%] rounded-3xl bg-orange-100/50" /></div>;
-
-                    return (
-                      <div key={i} className={`w-full h-full relative overflow-hidden flex items-center justify-center ${bg}`} style={{ gridColumn: x+1, gridRow: y+1 }}>
-                         {isStartSpot && <Star className="w-3/5 h-3/5 text-white/60 fill-current drop-shadow-sm" />}
-                         {isSafeSpot && <Star className="w-3/5 h-3/5 text-neutral-500/30 fill-current" />}
-                         {circle}
-                      </div>
-                    );
-                })}
+                <StaticLudoBoard />
 
                 {/* Draw Horses */}
                 {gameState.horses.map(h => {
@@ -553,7 +561,6 @@ export default function LudoGame({ user, onExit }: LudoGameProps) {
                 })}
             </div>
         </div>
-      </div>
 
         {/* Controls */}
         <div className="absolute bottom-0 left-0 right-0 p-4 pb-8 sm:p-6 sm:pb-10 bg-neo-bg flex flex-col items-center gap-4 pointer-events-none z-20">

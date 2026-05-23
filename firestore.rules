@@ -126,6 +126,23 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    function isValidDiary(data) {
+      return data.keys().hasAll(['title', 'content', 'date', 'photos', 'createdAt'])
+        && data.keys().size() == 5
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 10000
+        && data.date is string && data.date.size() <= 32
+        && data.photos is list && data.photos.size() <= 10;
+    }
+
+    // User Diaries
+    match /users/{userId}/diaries/{diaryId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidId(diaryId) && isValidDiary(incoming()) && (incoming().createdAt == request.time);
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidDiary(incoming());
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     function isValidGoal(data) {
       return data.keys().hasAll(['name', 'targetAmount', 'currentAmount', 'icon', 'userId'])
         && data.keys().size() >= 5
@@ -288,7 +305,8 @@ service cloud.firestore {
         && data.ownerId is string
         && data.memberIds is list && data.memberIds.size() > 0 && data.memberIds.size() <= 10
         && data.members is map
-        && data.funds is list;
+        && data.funds is list
+        && (!('contributionMode' in data) || data.contributionMode in ['income', 'equal', 'custom']);
     }
 
     // Shared Funds
@@ -300,8 +318,14 @@ service cloud.firestore {
         && request.auth.uid in incoming().memberIds;
       allow update: if isSignedIn() && isValidSharedFund(incoming())
         && incoming().ownerId == existing().ownerId
-        && (request.auth.uid in existing().memberIds || 
-            (request.auth.uid in incoming().memberIds && incoming().memberIds.hasAll(existing().memberIds)));
+        && (
+          (request.auth.uid in existing().memberIds) || 
+          (
+            request.auth.uid in incoming().memberIds && 
+            incoming().memberIds.hasAll(existing().memberIds) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'members'])
+          )
+        );
       allow delete: if isSignedIn() && existing().ownerId == request.auth.uid;
     }
     

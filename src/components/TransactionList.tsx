@@ -2,7 +2,7 @@ import React, { useState, useMemo, memo } from 'react';
 import { Transaction, TransactionType, TransactionStatus } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
 import * as LucideIcons from 'lucide-react';
-import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { ArrowUpDown, ArrowDown, ArrowUp, CalendarDays, Trash2, Share2, Check, X, AlertTriangle, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,31 +40,31 @@ const TransactionItem = memo(({
       initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
-      whileHover={reducedMotion ? {} : { scale: 1.01 }}
+      whileHover={reducedMotion ? {} : { scale: 1.005 }}
       whileTap={reducedMotion ? {} : { scale: 0.99 }}
-      transition={reducedMotion ? { duration: 0.2 } : { delay: idx * 0.05 }}
-      className="group flex flex-col sm:flex-row sm:items-center justify-between p-3.5 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-transparent hover:border-neutral-100/60 shadow-sm hover:shadow-md cursor-pointer"
+      transition={reducedMotion ? { duration: 0.2 } : { delay: idx * 0.03 }}
+      className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-neutral-100 hover:border-neutral-200/80 shadow-sm hover:shadow active:scale-100 cursor-pointer mb-2"
     >
       <div className="flex items-start sm:items-center gap-3">
         <div className={`w-11 h-11 rounded-full flex flex-col items-center justify-center transition-colors shrink-0 ${
-          t.type === TransactionType.INCOME ? 'bg-neutral-50/50 text-neutral-600' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
+          t.type === TransactionType.INCOME ? 'bg-neutral-50 text-neutral-600 border border-neutral-100' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
         }`}>
           <IconComponent className="w-5 h-5" />
         </div>
-        <div className="flex flex-col">
-          <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5">{t.description || categoryObj?.name}</div>
-          <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 font-medium">
+        <div className="flex flex-col min-w-0">
+          <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5 truncate">{t.description || categoryObj?.name}</div>
+          <div className="text-[11px] text-neutral-400 flex flex-wrap items-center gap-1.5 font-medium">
             <span className="font-mono tracking-tight text-neutral-500">{format(parseISO(t.date), 'HH:mm')}</span>
-            <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
+            <span className="w-1 h-1 rounded-full bg-neutral-300 shrink-0"></span>
             <span className="truncate">{categoryObj?.name}</span>
-            <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
-            <span className={`px-1.5 py-0.5 rounded-3xl ${t.status === TransactionStatus.COMPLETED ? 'bg-neutral-100 text-neutral-700' : 'bg-orange-100 text-orange-700'}`}>
-              {t.status === TransactionStatus.COMPLETED ? 'Đã hoàn thành' : 'Chờ xử lý'}
+            <span className="w-1 h-1 rounded-full bg-neutral-300 shrink-0"></span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${t.status === TransactionStatus.COMPLETED ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-orange-50 text-orange-700 border border-orange-100'}`}>
+              {t.status === TransactionStatus.COMPLETED ? 'Đã duyệt' : 'Chờ xử lý'}
             </span>
             {t.isRecurring && t.recurringPeriod && t.recurringPeriod !== 'none' && (
                <>
-                 <span className="w-0.5 h-0.5 rounded-3xl bg-neutral-300"></span>
-                 <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-3xl bg-neutral-50 text-neutral-600">
+                 <span className="w-1 h-1 rounded-full bg-neutral-300 shrink-0"></span>
+                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-neutral-50 text-neutral-600 border border-neutral-100">
                    <LucideIcons.Repeat className="w-2.5 h-2.5" />
                    {t.recurringPeriod === 'daily' ? 'Hàng ngày' : t.recurringPeriod === 'weekly' ? 'Hàng tuần' : t.recurringPeriod === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
                  </span>
@@ -73,47 +73,50 @@ const TransactionItem = memo(({
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-end mt-1 sm:mt-0 pl-14 sm:pl-0 gap-3">
+      <div className="flex items-center justify-between sm:justify-end mt-3 sm:mt-0 pl-14 sm:pl-0 gap-3 border-t border-neutral-100/60 pt-2.5 sm:pt-0 sm:border-t-0">
         <div className={`text-base font-bold font-mono tracking-tight text-right ${
-          t.type === TransactionType.INCOME ? 'text-neutral-600' : 'text-orange-500'
+          t.type === TransactionType.INCOME ? 'text-emerald-600' : 'text-orange-500'
         }`}>
           {t.type === TransactionType.INCOME ? '+' : '-'}{formatMoney(t.amount)}
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            const catName = categoryObj?.name || 'Khác';
-            const sign = t.type === TransactionType.INCOME ? '+' : '-';
-            const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${formatMoney(t.amount)}\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
-            
-            if (navigator.share) {
-              navigator.share({
-                title: 'Chi tiết giao dịch',
-                text: text,
-              }).catch(console.error);
-            } else {
-              navigator.clipboard.writeText(text).then(() => {
-                alert('Đã sao chép vào clipboard!');
-              }).catch(console.error);
-            }
-          }}
-          className="p-1.5 text-neutral-400 hover:text-neutral-500 hover:bg-neutral-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100"
-          title="Chia sẻ"
-        >
-          <Share2 className="w-4 h-4" />
-        </button>
-        {onDeleteRequest && (
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteRequest(t.id);
+              const catName = categoryObj?.name || 'Khác';
+              const sign = t.type === TransactionType.INCOME ? '+' : '-';
+              const text = `Giao dịch: ${t.description || catName}\nSố tiền: ${sign}${formatMoney(t.amount)}\nThời gian: ${format(parseISO(t.date), 'HH:mm dd/MM/yyyy')}\nDanh mục: ${catName}`;
+              
+              if (navigator.share) {
+                navigator.share({
+                  title: 'Chi tiết giao dịch',
+                  text: text,
+                }).catch(console.error);
+              } else {
+                navigator.clipboard.writeText(text).then(() => {
+                  alert('Đã sao chép vào clipboard!');
+                }).catch(console.error);
+              }
             }}
-            className="p-1.5 text-neutral-400 hover:text-orange-500 hover:bg-orange-50 rounded-3xl transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-            title="Xóa giao dịch"
+            className="p-2 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100/60 rounded-full transition-all duration-200 opacity-100 md:opacity-0 md:group-hover:opacity-100 active:scale-95"
+            title="Chia sẻ"
           >
-            <Trash2 className="w-4 h-4" />
+            <Share2 className="w-4 h-4" />
           </button>
-        )}
+          {onDeleteRequest && (
+            <button
+              id={`delete-btn-${t.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest(t.id);
+              }}
+              className="delete-transaction-btn p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 opacity-100 md:opacity-0 md:group-hover:opacity-100 active:scale-95 flex-shrink-0"
+              title="Xóa giao dịch"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );
@@ -258,20 +261,20 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
   return (
     <div className="card p-8">
       {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-xl"
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-neutral-100"
           >
-             <div className="flex justify-center mb-4 text-orange-500">
-               <AlertTriangle className="w-12 h-12" />
+             <div className="flex justify-center mb-4 text-rose-500 bg-rose-50 w-14 h-14 rounded-full items-center mx-auto">
+               <AlertTriangle className="w-7 h-7" />
              </div>
-             <h3 className="text-lg font-bold text-center mb-2">Xác nhận xóa?</h3>
+             <h3 className="text-lg font-bold text-neutral-850 text-center mb-2">Xác nhận xóa?</h3>
              <p className="text-sm text-neutral-500 text-center mb-6">Bạn có chắc chắn muốn xóa giao dịch này? Hành động này không thể hoàn tác.</p>
              <div className="flex gap-3">
-               <button onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-2 bg-neutral-100 rounded-3xl font-bold hover:bg-neutral-200 transition-colors">Hủy</button>
-               <button onClick={() => { onDelete?.(confirmDeleteId); setConfirmDeleteId(null); }} className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-3xl font-bold hover:bg-orange-700 transition-colors">Xác nhận Xóa</button>
+               <button id="cancel-delete-transaction-btn" onClick={() => setConfirmDeleteId(null)} className="flex-1 px-4 py-2.5 bg-neutral-100 rounded-3xl font-bold hover:bg-neutral-200 text-neutral-700 transition-colors">Hủy</button>
+               <button id="confirm-delete-transaction-btn" onClick={() => { onDelete?.(confirmDeleteId); setConfirmDeleteId(null); }} className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-3xl font-bold hover:bg-rose-700 transition-colors">Xác nhận Xóa</button>
              </div>
           </motion.div>
         </div>
@@ -283,7 +286,7 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
         </div>
         {!hideHeaderActions && (
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
@@ -419,31 +422,50 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
                     key={`${group.dayLabel}-${currentPage}`}
                     className="mb-8 last:mb-0"
                   >
-                    <div className="flex items-center justify-between py-2 mb-3">
-                       <div className="flex items-center gap-4">
-                         <div className="w-14 h-14 bg-neutral-50 rounded-full flex flex-col items-center justify-center shrink-0">
-                           <span className="text-xl font-bold text-neutral-900 leading-none mb-1">{format(group.date, 'dd')}</span>
-                           <span className="text-[11px] font-medium text-neutral-500 leading-none">{format(group.date, 'yyyy')}</span>
-                         </div>
-                         <div className="flex flex-col gap-1">
-                            <div className="text-xs font-medium text-neutral-500 flex items-center gap-3">
-                               <span className="w-6">Thu</span>
-                               <span className="text-neutral-600 font-mono tracking-tight font-semibold">+{formatMoney(group.totalIncome)}</span>
-                            </div>
-                            <div className="text-xs font-medium text-neutral-500 flex items-center gap-3">
-                               <span className="w-6">Chi</span>
-                               <span className="text-orange-500 font-mono tracking-tight font-semibold">-{formatMoney(group.totalExpense)}</span>
-                            </div>
-                         </div>
-                       </div>
-                       <div className="text-right">
-                         <div className="text-xs font-medium text-neutral-500 mb-0.5">Còn lại</div>
-                         <div className={`text-sm font-mono font-bold tracking-tight ${
-                           (group.totalIncome - group.totalExpense) < 0 ? 'text-[#ff4e42]' : 'text-[#0088cc]'
-                         }`}>
-                           {formatMoney(group.totalIncome - group.totalExpense)}
-                         </div>
-                       </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between py-3.5 mb-4 bg-neutral-50/60 hover:bg-neutral-50/80 rounded-3xl px-4 border border-neutral-100 transition-all duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex flex-col items-center justify-center border border-neutral-200/50 shadow-sm shrink-0">
+                          <span className="text-base font-bold text-neutral-900 leading-none">{format(group.date, 'dd')}</span>
+                          <span className="text-[10px] font-bold text-neutral-400 uppercase mt-1">Thg {format(group.date, 'M')}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-neutral-800 capitalize leading-snug">
+                            {group.dayOfWeek}
+                          </span>
+                          <span className="text-[11px] font-semibold text-neutral-400 font-mono">
+                            {format(group.date, 'dd/MM/yyyy')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-3 sm:mt-0 justify-between sm:justify-end pl-15 sm:pl-0 border-t border-dashed border-neutral-200/60 pt-2.5 sm:pt-0 sm:border-t-0">
+                        <div className="flex items-center gap-4">
+                          <div className="flex flex-col text-left sm:text-right">
+                            <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Tổng Thu</span>
+                            <span className="text-[13px] font-mono font-bold tracking-tight text-emerald-600 block mt-0.5">
+                              +{formatMoney(group.totalIncome)}
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-col text-left sm:text-right">
+                            <span className="text-[9px] uppercase font-bold text-neutral-450 tracking-wider">Tổng Chi</span>
+                            <span className="text-[13px] font-mono font-bold tracking-tight text-orange-500 block mt-0.5">
+                              -{formatMoney(group.totalExpense)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="w-px h-6 bg-neutral-200 hidden sm:block"></div>
+
+                        <div className="flex flex-col text-right">
+                          <span className="text-[9px] uppercase font-bold text-neutral-400 tracking-wider">Tính ngày</span>
+                          <span className={`text-[13px] font-mono font-extrabold tracking-tight block mt-0.5 ${
+                            (group.totalIncome - group.totalExpense) < 0 ? 'text-orange-600' : 'text-emerald-600'
+                          }`}>
+                            {(group.totalIncome - group.totalExpense) > 0 ? '+' : ''}{formatMoney(group.totalIncome - group.totalExpense)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       {group.items.map((t, idx) => (

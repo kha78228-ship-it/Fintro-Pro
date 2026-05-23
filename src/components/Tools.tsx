@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart, LineChart, Users, ArrowRightLeft } from 'lucide-react';
+import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart, LineChart, Users, ArrowRightLeft, AppWindow, Globe } from 'lucide-react';
 import { useCurrency } from '../lib/CurrencyContext';
 
 interface ToolsProps {
@@ -172,7 +172,7 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="col-span-1 md:col-span-2 bg-white rounded-3xl p-6 flex items-center justify-between shadow-sm border border-neutral-200 text-neo-dark cursor-pointer hover:scale-[1.02] transition-transform"
+            className="col-span-1 md:col-span-1 bg-white rounded-3xl p-6 flex items-center justify-between shadow-sm border border-neutral-200 text-neo-dark cursor-pointer hover:scale-[1.02] transition-transform"
             onClick={() => setCurrentView && setCurrentView('reports')}
           >
             <div className="flex items-center gap-4">
@@ -186,6 +186,28 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
             </div>
           </motion.div>
         )}
+
+        {/* Đóng gói App Web Link */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="col-span-1 md:col-span-1 bg-gradient-to-r from-orange-50 to-amber-50 rounded-3xl p-6 flex items-center justify-between shadow-sm border border-orange-200 text-neo-dark cursor-pointer hover:scale-[1.02] transition-transform"
+          onClick={() => setCurrentView && setCurrentView('web_app_wrapper')}
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center shrink-0 border border-orange-200">
+              <AppWindow className="w-7 h-7 text-orange-600" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold font-display text-neutral-900 flex items-center gap-2">
+                Đóng Gói Link Web
+                <span className="text-[9px] uppercase tracking-widest font-extrabold text-orange-600 bg-orange-200/50 px-2 py-0.5 rounded-full border border-orange-300">PWA</span>
+              </h3>
+              <p className="text-neutral-500 text-sm mt-1">Số hóa & đóng gói bất kỳ website nào thành bản App.</p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Lịch dâu chị em */}
         {appMode === 'love' && (

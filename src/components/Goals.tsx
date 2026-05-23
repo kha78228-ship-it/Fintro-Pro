@@ -18,7 +18,7 @@ const ICONS = [
   { id: 'GraduationCap', icon: GraduationCap, label: 'Học tập' },
 ];
 
-export default function Goals({ appTheme = "vietnam" }: { appTheme?: "vintage" | "vietnam" | "pink_cute" }) {
+export default function Goals({ appTheme = "vietnam" }: { appTheme?: "vintage" | "vietnam" | "pink_cute" | "google_material" }) {
   const { formatMoney, currency } = useCurrency();
   const [personalGoals, setPersonalGoals] = useState<Goal[]>([]);
   const [sharedGoals, setSharedGoals] = useState<Goal[]>([]);

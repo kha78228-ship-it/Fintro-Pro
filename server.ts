@@ -9,22 +9,40 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
 
+  // Helper to extract and sanitize API keys from raw environment
+  const getSanitizedKeys = (): string[] => {
+    const rawKeys: string[] = [];
+    if (process.env.PIKEY) rawKeys.push(process.env.PIKEY);
+    if (process.env.GEMINI_API_KEY) rawKeys.push(process.env.GEMINI_API_KEY);
+    
+    // Scan all env vars for potential keys
+    Object.keys(process.env).forEach(k => {
+      const val = process.env[k];
+      if (typeof val === 'string' && (val.startsWith("AIza") || val.includes("AIza"))) {
+        rawKeys.push(val);
+      }
+    });
+
+    const sanitized = rawKeys.map(key => {
+      let cleaned = key.trim();
+      // Remove surrounding double or single quotes
+      if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+        cleaned = cleaned.slice(1, -1).trim();
+      }
+      return cleaned;
+    }).filter(key => key.length > 5);
+
+    return Array.from(new Set(sanitized));
+  };
+
   // API route for Gemini
   app.post("/api/gemini/generateContent", async (req, res) => {
     try {
-      const allKeys = Object.keys(process.env)
-        .map(k => process.env[k])
-        .filter(v => typeof v === 'string' && v.startsWith("AIza"));
+      const potentialKeys = getSanitizedKeys();
       
-      if (allKeys.length === 0) {
-        return res.status(500).json({ error: "API_KEY_INVALID: API key not found on server." });
+      if (potentialKeys.length === 0) {
+        return res.status(500).json({ error: "API_KEY_INVALID: API key not found on server. Please add GEMINI_API_KEY to Settings -> Secrets." });
       }
-
-      const priorityKeys = [];
-      if (process.env.PIKEY?.startsWith("AIza")) priorityKeys.push(process.env.PIKEY);
-      if (process.env.GEMINI_API_KEY?.startsWith("AIza")) priorityKeys.push(process.env.GEMINI_API_KEY);
-      
-      const potentialKeys = Array.from(new Set([...priorityKeys, ...allKeys])) as string[];
       
       let finalResponse = null;
       let lastError = null;
@@ -33,7 +51,7 @@ async function startServer() {
         try {
           const ai = new GoogleGenAI({ apiKey });
           finalResponse = await ai.models.generateContent(req.body);
-          break; // Thành công, thoát vòng lặp
+          break; // Functional success, exit key loop
         } catch (error: any) {
           lastError = error;
           const msg = error.message || "";
@@ -41,7 +59,6 @@ async function startServer() {
             console.log("Skipping invalid key...");
             continue; 
           }
-          // Lỗi khác (ví dụ: bad request do model, v.v...) thì báo lỗi này ra luôn (có thể thử key khác nếu là limit, nhưng tạm thời skip key sai)
           if (msg.includes("quota") || msg.includes("exhausted") || msg.includes("429")) {
              console.log("Quota exceeded, trying next key...");
              continue;
@@ -66,20 +83,12 @@ async function startServer() {
       const { prompt } = req.body;
       if (!prompt) return res.status(400).json({ error: "No prompt provided" });
 
-      const allKeys = Object.keys(process.env)
-        .map(k => process.env[k])
-        .filter(v => typeof v === 'string' && v.startsWith("AIza"));
+      const potentialKeys = getSanitizedKeys();
       
-      if (allKeys.length === 0) {
-        return res.status(500).json({ error: "API_KEY_INVALID: API key not found on server." });
+      if (potentialKeys.length === 0) {
+        return res.status(500).json({ error: "API_KEY_INVALID: API key not found on server. Please add GEMINI_API_KEY to Settings -> Secrets." });
       }
 
-      const priorityKeys = [];
-      if (process.env.PIKEY?.startsWith("AIza")) priorityKeys.push(process.env.PIKEY);
-      if (process.env.GEMINI_API_KEY?.startsWith("AIza")) priorityKeys.push(process.env.GEMINI_API_KEY);
-      
-      const potentialKeys = Array.from(new Set([...priorityKeys, ...allKeys])) as string[];
-      
       let finalImageUrl = null;
       let lastError = null;
 
@@ -105,7 +114,7 @@ async function startServer() {
               break;
             }
           }
-          if (finalImageUrl) break; // Thành công
+          if (finalImageUrl) break; // Success
         } catch (error: any) {
           lastError = error;
           const msg = error.message || "";

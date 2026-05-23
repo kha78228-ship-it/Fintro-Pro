@@ -71,7 +71,9 @@
         "ownerId": { "type": "string" },
         "memberIds": { "type": "array", "items": { "type": "string" } },
         "members": { "type": "object" },
-        "funds": { "type": "array" }
+        "funds": { "type": "array" },
+        "contributionMode": { "type": "string", "enum": ["income", "equal", "custom"], "description": "Contribution split calculation method" },
+        "targetBudget": { "type": "number", "description": "Monthly general target budget goal" }
       },
       "required": ["ownerId", "memberIds", "members", "funds"]
     },
@@ -127,6 +129,19 @@
         "createdAt": { "type": "number" }
       },
       "required": ["type", "title", "description", "time", "read", "createdAt"]
+    },
+    "Diary": {
+      "title": "Diary",
+      "description": "Diary entry for capturing sweet moments and thoughts",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the entry" },
+        "content": { "type": "string", "description": "Markdown content" },
+        "date": { "type": "string", "description": "Date of the entry" },
+        "photos": { "type": "array", "items": { "type": "string" }, "description": "Array of base64 or Unsplash URLs" },
+        "createdAt": { "type": "object", "description": "Server timestamp of creation" }
+      },
+      "required": ["title", "content", "date", "photos", "createdAt"]
     }
   },
   "firestore": {
@@ -142,6 +157,10 @@
        "schema": "CoupleData",
        "description": "Couple specific shared data like games or questions"
     },
+    "/couple_data/{dataId}/diaries/{diaryId}": {
+       "schema": "Diary",
+       "description": "Couple diary memories"
+    },
     "/shared_funds/{fundId}": {
       "schema": "SharedFund",
       "description": "Shared family fund"
@@ -149,6 +168,10 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User profiles"
+    },
+    "/users/{userId}/diaries/{diaryId}": {
+      "schema": "Diary",
+      "description": "User personal diary memories"
     },
     "/users/{userId}/transactions/{transactionId}": {
       "schema": "Transaction",

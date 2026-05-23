@@ -2,18 +2,17 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 const heritages = [
-  { title: "Vietnam Silicon Valley", desc: "Khu CNC Hòa Lạc", system: "ALPHAGEN", image: "https://images.unsplash.com/photo-1549480017-d2ce11a76274?q=80&w=2000&auto=format&fit=crop" },
-  { title: "Trung Tâm Tài Chính SG", desc: "Landmark 81", system: "CYBER-SYNC", image: "https://images.unsplash.com/photo-1583417319070-4a69db38a482?q=80&w=2000&auto=format&fit=crop" },
-  { title: "Hàng Không Điện Tử", desc: "Sân Bay Long Thành", system: "NEURO-REC", image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2000&auto=format&fit=crop" },
-  { title: "Đô Thị Bán Dẫn", desc: "Bình Dương / Đà Nẵng", system: "HOLO-CORE", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=2000&auto=format&fit=crop" },
-  { title: "Mạng Lưới Vệ Tinh", desc: "VINASAT-3", system: "QUANTUM-MAP", image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2000&auto=format&fit=crop" },
+  { title: "Vietnam Silicon Valley", desc: "Khu CNC Hòa Lạc", system: "ALPHAGEN", image: "https://images.unsplash.com/photo-1549480017-d2ce11a76274?auto=format&fit=crop&w=1000&q=70" },
+  { title: "Trung Tâm Tài Chính SG", desc: "Landmark 81", system: "CYBER-SYNC", image: "https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=1000&q=70" },
+  { title: "Hàng Không Điện Tử", desc: "Sân Bay Long Thành", system: "NEURO-REC", image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1000&q=70" },
+  { title: "Đô Thị Bán Dẫn", desc: "Bình Dương / Đà Nẵng", system: "HOLO-CORE", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=70" },
+  { title: "Mạng Lưới Vệ Tinh", desc: "VINASAT-3", system: "QUANTUM-MAP", image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1000&q=70" },
 ];
 
 export function VietnamBackground({ appMode = "finance", graphicsQuality = "high" }: { appMode?: "finance" | "love" | "entertainment", graphicsQuality?: "high" | "low" }) {
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
 
   useEffect(() => {
-    // Extra fast frequency, making images overlap constantly as the transition is longer than the interval
     const intervalTime = graphicsQuality === "high" ? 4000 : 8000;
     const timer = setInterval(() => {
       setCurrentImgIndex((prev) => (prev + 1) % heritages.length);
@@ -42,28 +41,28 @@ export function VietnamBackground({ appMode = "finance", graphicsQuality = "high
           {graphicsQuality === "high" && (
             <motion.div
               key={`img-${currentImgIndex}`}
-              initial={{ opacity: 0, scale: 1.5, filter: "blur(30px) contrast(300%) hue-rotate(180deg) saturate(200%)" }}
-              animate={{ opacity: 0.6, scale: 1, filter: "blur(0px) contrast(150%) hue-rotate(0deg) saturate(100%)" }}
-              exit={{ opacity: 0, scale: 0.5, filter: "blur(30px) contrast(50%) hue-rotate(-180deg) saturate(0%)" }}
-              transition={{ duration: 4, ease: "easeInOut" }}
+              initial={{ opacity: 0, scale: 1.05 }}
+              animate={{ opacity: 0.6, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 2.5, ease: "easeInOut" }}
               className="absolute inset-0 w-full h-full pointer-events-none mix-blend-overlay"
-              style={{ willChange: "transform, opacity, filter" }}
+              style={{ willChange: "transform, opacity" }}
             >
               <img 
                 src={heritages[currentImgIndex].image} 
                 className="absolute inset-0 w-full h-full object-cover"
                 alt=""
               />
-              {/* Heavy glass displacement overlay and heavy pseudo-elements */}
-              <div className="absolute inset-0 backdrop-blur-[50px] mix-blend-hard-light bg-black/10" />
+              {/* High-performance dark gradient overlay masking without backdrop-blur */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#030914] via-[#030914]/40 to-[#030914]" />
             </motion.div>
           )}
           <motion.div
             key={`text-${currentImgIndex}`}
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -15 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 1, ease: "easeInOut" }}
+            exit={{ opacity: 0, x: 15 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
             className="absolute inset-0 w-full h-full pointer-events-none"
             style={{ willChange: "transform, opacity" }}
           >
@@ -76,8 +75,8 @@ export function VietnamBackground({ appMode = "finance", graphicsQuality = "high
                 </div>
               </div>
               <div 
-                className={`text-2xl md:text-5xl font-black ${graphicsQuality === "high" ? "drop-shadow-lg" : ""}`}
-                style={{ color: primary, textShadow: graphicsQuality === "high" ? `0 0 20px ${primary}` : undefined, willChange: graphicsQuality === "high" ? "color, text-shadow" : "color" }}
+                className={`text-2xl md:text-5xl font-black ${graphicsQuality === "high" ? "drop-shadow-[0_4px_12px_rgba(3,9,20,0.8)]" : ""}`}
+                style={{ color: primary, textShadow: graphicsQuality === "high" ? `0 0 16px ${primary}aa` : undefined }}
               >
                 {heritages[currentImgIndex].title}
               </div>
@@ -91,59 +90,59 @@ export function VietnamBackground({ appMode = "finance", graphicsQuality = "high
           </motion.div>
         </AnimatePresence>
         {/* Digital scanline overlay over images */}
-        <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, currentColor 2px, currentColor 4px)', color: primary, backgroundSize: '100% 4px' }} />
+        <div className="absolute inset-0 pointer-events-none opacity-15" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, currentColor 2px, currentColor 4px)', color: primary, backgroundSize: '100% 4px' }} />
       </div>
 
       {/* "Loang" (Glowing Blur Gradients) Background - Kỷ Nguyên Vươn Mình */}
       <div 
-        className={`absolute inset-0 pointer-events-none z-0 transition-all duration-1000 ${graphicsQuality === "high" ? "opacity-60 mix-blend-screen" : "opacity-40"}`}
+        className={`absolute inset-0 pointer-events-none z-0 transition-all duration-1000 ${graphicsQuality === "high" ? "opacity-50 mix-blend-screen" : "opacity-30"}`}
       >
         {/* Central glowing core - The Vietnam Star (Vươn Mình) */}
         {graphicsQuality === "high" ? (
           <>
             <motion.div 
-              animate={{ scale: [1, 1.3, 1], opacity: [0.6, 0.9, 0.6], rotate: [0, 90, 180] }}
-              transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vw] h-[70vw] md:w-[40vw] md:h-[40vw] rounded-3xl blur-[100px] md:blur-[150px] transition-colors duration-1000" 
-              style={{ backgroundColor: "#DA251D" }} /* Flag Red */
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vw] h-[70vw] md:w-[45vw] md:h-[45vw] rounded-full blur-[100px] md:blur-[130px] transition-colors duration-1000" 
+              style={{ backgroundColor: "#DA251D", willChange: "opacity" }} /* Flag Red */
             />
             <motion.div 
-              animate={{ scale: [1, 1.5, 1], opacity: [0.7, 1, 0.7], rotate: [180, 90, 0] }}
-              transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40vw] h-[40vw] md:w-[20vw] md:h-[20vw] rounded-3xl blur-[80px] md:blur-[100px] transition-colors duration-1000" 
-              style={{ backgroundColor: "#FFFF00" }} /* Flag Gold/Yellow */
+              animate={{ opacity: [0.6, 0.9, 0.6] }}
+              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40vw] h-[40vw] md:w-[25vw] md:h-[25vw] rounded-full blur-[80px] md:blur-[100px] transition-colors duration-1000" 
+              style={{ backgroundColor: "#FFFF00", willChange: "opacity" }} /* Flag Gold/Yellow */
             />
             {/* Secondary accents representing technology & future (Kỷ Nguyên) */}
             <motion.div 
-              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3], x: [0, -100, 0], y: [0, -100, 0] }}
-              transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute top-[20%] left-[20%] w-[50vw] h-[50vw] md:w-[30vw] md:h-[30vw] rounded-3xl blur-[90px] md:blur-[120px] transition-colors duration-1000" 
-              style={{ backgroundColor: "#00bfff" }} /* Cyber Blue */
+              animate={{ opacity: [0.2, 0.5, 0.2] }}
+              transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute top-[20%] left-[20%] w-[50vw] h-[50vw] md:w-[35vw] md:h-[35vw] rounded-full blur-[90px] md:blur-[115px] transition-colors duration-1000" 
+              style={{ backgroundColor: "#00bfff", willChange: "opacity" }} /* Cyber Blue */
             />
             <motion.div 
-              animate={{ scale: [1, 1.4, 1], opacity: [0.4, 0.7, 0.4], x: [0, 100, 0], y: [0, 100, 0] }}
-              transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 5 }}
-              className="absolute bottom-[20%] right-[20%] w-[60vw] h-[60vw] md:w-[35vw] md:h-[35vw] rounded-3xl blur-[100px] md:blur-[130px] transition-colors duration-1000" 
-              style={{ backgroundColor: "#ff3b3b" }} /* Cyber Red */
+              animate={{ opacity: [0.3, 0.6, 0.3] }}
+              transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 4 }}
+              className="absolute bottom-[20%] right-[20%] w-[60vw] h-[60vw] md:w-[40vw] md:h-[40vw] rounded-full blur-[100px] md:blur-[120px] transition-colors duration-1000" 
+              style={{ backgroundColor: "#ff3b3b", willChange: "opacity" }} /* Cyber Red */
             />
           </>
         ) : (
           <>
             <div 
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vw] md:w-[60vw] md:h-[60vw] rounded-3xl transition-colors duration-1000" 
-              style={{ backgroundImage: "radial-gradient(circle, rgba(218, 37, 29, 0.4) 0%, transparent 70%)" }} /* Flag Red */
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vw] md:w-[60vw] md:h-[60vw] rounded-full transition-colors duration-1000" 
+              style={{ backgroundImage: "radial-gradient(circle, rgba(218, 37, 29, 0.3) 0%, transparent 75%)" }} /* Flag Red */
             />
             <div 
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] md:w-[40vw] md:h-[40vw] rounded-3xl transition-colors duration-1000" 
-              style={{ backgroundImage: "radial-gradient(circle, rgba(255, 255, 0, 0.3) 0%, transparent 70%)" }} /* Flag Gold/Yellow */
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vw] md:w-[40vw] md:h-[40vw] rounded-full transition-colors duration-1000" 
+              style={{ backgroundImage: "radial-gradient(circle, rgba(255, 255, 0, 0.2) 0%, transparent 75%)" }} /* Flag Gold/Yellow */
             />
             <div 
-              className="absolute top-[10%] left-[10%] w-[100vw] h-[100vw] md:w-[50vw] md:h-[50vw] rounded-3xl transition-colors duration-1000" 
-              style={{ backgroundImage: "radial-gradient(circle, rgba(0, 191, 255, 0.2) 0%, transparent 70%)" }} /* Cyber Blue */
+              className="absolute top-[10%] left-[10%] w-[100vw] h-[100vw] md:w-[50vw] md:h-[50vw] rounded-full transition-colors duration-1000" 
+              style={{ backgroundImage: "radial-gradient(circle, rgba(0, 191, 255, 0.15) 0%, transparent 75%)" }} /* Cyber Blue */
             />
             <div 
-              className="absolute bottom-[10%] right-[10%] w-[120vw] h-[120vw] md:w-[60vw] md:h-[60vw] rounded-3xl transition-colors duration-1000" 
-              style={{ backgroundImage: "radial-gradient(circle, rgba(255, 59, 59, 0.2) 0%, transparent 70%)" }} /* Cyber Red */
+              className="absolute bottom-[10%] right-[10%] w-[120vw] h-[120vw] md:w-[60vw] md:h-[60vw] rounded-full transition-colors duration-1000" 
+              style={{ backgroundImage: "radial-gradient(circle, rgba(255, 59, 59, 0.15) 0%, transparent 75%)" }} /* Cyber Red */
             />
           </>
         )}
@@ -205,7 +204,7 @@ export function VietnamBackground({ appMode = "finance", graphicsQuality = "high
         </div>
       </div>
 
-      <div className="absolute inset-0 z-20 bg-neo-bg pointer-events-none" />
+
     </div>
   );
 }

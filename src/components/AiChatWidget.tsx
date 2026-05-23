@@ -39,6 +39,66 @@ interface AiChatWidgetProps {
 
 type ChatMode = 'finance' | 'love' | 'entertainment';
 
+const ChatMessageItem = React.memo(({ 
+  msg, 
+  activeMode, 
+  avatarConfig 
+}: { 
+  msg: Message; 
+  activeMode: ChatMode; 
+  avatarConfig: AiAvatarConfig;
+}) => {
+  const AvatarIcon = ({ className }: { className?: string }) => {
+    if (avatarConfig.type === 'generated') {
+       return <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${avatarConfig.value}`} alt="AI" className={`object-cover rounded-full bg-white/20 ${className || ""}`} referrerPolicy="no-referrer" />;
+    }
+    const IconObj = PREDEFINED_ICONS.find(i => i.id === avatarConfig.value)?.icon || Sparkles;
+    return <IconObj className={className} />;
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+    >
+      {msg.role === 'assistant' && (
+         <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 shrink-0 self-end mb-1 overflow-hidden transition-colors ${activeMode === 'love' ? 'bg-orange-100' : activeMode === 'entertainment' ? 'bg-purple-100' : 'bg-neutral-200'}`}>
+            <AvatarIcon className={`w-5 h-5 object-cover ${activeMode === 'love' ? 'text-orange-600' : activeMode === 'entertainment' ? 'text-purple-600' : 'text-neutral-600'}`} />
+         </div>
+      )}
+      <div className="flex flex-col gap-1">
+        <div 
+          className={`max-w-[80%] p-3.5 rounded-3xl text-[13px] leading-relaxed ${
+            msg.role === 'user' 
+              ? 'bg-neutral-900 text-white shadow-md' 
+              : 'bg-white text-neutral-800 shadow-sm border border-neutral-100'
+          }`}
+        >
+          {msg.role === 'user' ? (
+            msg.content
+          ) : (
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {msg.content}
+              </ReactMarkdown>
+            </div>
+          )}
+        </div>
+        <div className={`text-[10px] text-neutral-400 flex items-center gap-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start ml-1'}`}>
+          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {msg.status && (
+            <span className="capitalize text-[9px] opacity-70"> • {msg.status}</span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
+ChatMessageItem.displayName = 'ChatMessageItem';
+
 export default function AiChatWidget({ transactions = [], appMode = 'finance', user }: AiChatWidgetProps) {
   const { formatMoney, currency, currencySymbol } = useCurrency();
   const [isOpen, setIsOpen] = useState(false);
@@ -86,7 +146,7 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
   };
 
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid || !isOpen) return;
     const debtsRef = collection(db, `users/${user.uid}/debts`);
     const subsRef = collection(db, `users/${user.uid}/subscriptions`);
 
@@ -106,7 +166,7 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
       unsubDebts();
       unsubSubs();
     };
-  }, [user?.uid]);
+  }, [user?.uid, isOpen]);
 
   // Load chat history from localStorage on mount
   useEffect(() => {
@@ -450,44 +510,12 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
                    </div>
                 )}
                 {currentMessages.map((msg) => (
-                  <motion.div 
-                    key={msg.id} 
-                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    {msg.role === 'assistant' && (
-                       <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 shrink-0 self-end mb-1 overflow-hidden transition-colors ${activeMode === 'love' ? 'bg-orange-100' : activeMode === 'entertainment' ? 'bg-purple-100' : 'bg-neutral-200'}`}>
-                          <AvatarIcon className={`w-5 h-5 object-cover ${activeMode === 'love' ? 'text-orange-600' : activeMode === 'entertainment' ? 'text-purple-600' : 'text-neutral-600'}`} />
-                       </div>
-                    )}
-                    <div className="flex flex-col gap-1">
-                      <div 
-                        className={`max-w-[80%] p-3.5 rounded-3xl text-[13px] leading-relaxed ${
-                          msg.role === 'user' 
-                            ? 'bg-neutral-900 text-white shadow-md' 
-                            : 'bg-white text-neutral-800 shadow-sm border border-neutral-100'
-                        }`}
-                      >
-                        {msg.role === 'user' ? (
-                          msg.content
-                        ) : (
-                          <div className="markdown-body">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content}
-                            </ReactMarkdown>
-                          </div>
-                        )}
-                      </div>
-                      <div className={`text-[10px] text-neutral-400 flex items-center gap-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start ml-1'}`}>
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {msg.status && (
-                          <span className="capitalize text-[9px] opacity-70"> • {msg.status}</span>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
+                  <ChatMessageItem
+                    key={msg.id}
+                    msg={msg}
+                    activeMode={activeMode}
+                    avatarConfig={avatarConfig}
+                  />
                 ))}
                 {isLoading && (
                   <motion.div 

@@ -9,7 +9,7 @@ import { Transaction } from '../types';
 interface PlanningProps {
   transactions: Transaction[];
   reducedMotion?: boolean;
-  appTheme?: "vintage" | "vietnam" | "pink_cute";
+  appTheme?: "vintage" | "vietnam" | "pink_cute" | "google_material";
 }
 
 export default memo(function Planning({ transactions, reducedMotion, appTheme }: PlanningProps) {

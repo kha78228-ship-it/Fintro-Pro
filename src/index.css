@@ -137,11 +137,12 @@
 }
 
 /* Force override of rounded corners to match Neo aesthetic where classes might bypass theme */
-* {
+/* Force override of rounded corners to match Neo aesthetic in vintage theme only */
+[data-theme="vintage"] * {
   border-radius: 0 !important;
 }
 
-/* Exception for full cirles like avatars */
+/* Exception for full circles like avatars */
 .rounded-full {
   border-radius: 9999px !important;
 }
@@ -181,30 +182,149 @@
     animation: marquee 15s linear infinite;
   }
 
-  /* Neo-brutalism shadow overrides */
-  .shadow-sm,
-  .shadow-inner {
+  /* Neo-brutalism shadow overrides - scoped to vintage theme */
+  [data-theme="vintage"] .shadow-sm,
+  [data-theme="vintage"] .shadow-inner {
     box-shadow: 2px 2px 0px 0px var(--color-neo-dark) !important;
   }
-  .shadow-md {
+  [data-theme="vintage"] .shadow-md {
     box-shadow: 4px 4px 0px 0px var(--color-neo-dark) !important;
   }
-  .shadow,
-  .shadow-lg {
+  [data-theme="vintage"] .shadow,
+  [data-theme="vintage"] .shadow-lg {
     box-shadow: 6px 6px 0px 0px var(--color-neo-dark) !important;
   }
-  .shadow-xl {
+  [data-theme="vintage"] .shadow-xl {
     box-shadow: 8px 8px 0px 0px var(--color-neo-dark) !important;
   }
-  .shadow-2xl {
+  [data-theme="vintage"] .shadow-2xl {
     box-shadow: 12px 12px 0px 0px var(--color-neo-dark) !important;
   }
 }
 
-/* Also ensure form elements and common containers have dark borders */
-input,
-select,
-textarea,
-button {
+/* Also ensure form elements and common containers have dark borders - scoped to vintage theme */
+[data-theme="vintage"] input,
+[data-theme="vintage"] select,
+[data-theme="vintage"] textarea,
+[data-theme="vintage"] button {
   border-color: var(--color-neo-dark) !important;
+}
+
+/* Hide scrollbars for overflow-navbars on mobile while keeping native swipe physics */
+.custom-scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+}
+.custom-scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+/* Google Material Theme Global Styling Overrides */
+[data-theme="google_material"] {
+  --color-neo-bg: #f8f9fa;
+  --color-neo-dark: #1f1f1f;
+  --color-neo-light: #ffffff;
+  --color-neo-orange: #1a73e8;
+  background-image: none !important;
+}
+
+[data-theme="google_material"] * {
+  border-radius: 12px;
+  font-family: "Inter", "Google Sans", sans-serif !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="google_material"] .card {
+  border-radius: 24px !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  background-color: #ffffff !important;
+}
+
+[data-theme="google_material"] .card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
+  transform: translateY(-2px);
+}
+
+[data-theme="google_material"] [class*="border-2"],
+[data-theme="google_material"] [class*="border-4"],
+[data-theme="google_material"] [class*="border-"] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="google_material"] .border-neo-dark {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="google_material"] [class*="shadow-["] {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="google_material"] .rounded-full,
+[data-theme="google_material"] .rounded-full * {
+  border-radius: 9999px !important;
+}
+
+[data-theme="google_material"] .rounded-none {
+  border-radius: 0px !important;
+}
+
+[data-theme="google_material"] input,
+[data-theme="google_material"] select,
+[data-theme="google_material"] textarea,
+[data-theme="google_material"] .input-field {
+  border-radius: 12px !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  background-color: #ffffff !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+[data-theme="google_material"] input:focus,
+[data-theme="google_material"] select:focus,
+[data-theme="google_material"] textarea:focus,
+[data-theme="google_material"] .input-field:focus {
+  border-color: #1a73e8 !important;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15) !important;
+}
+
+[data-theme="google_material"] button,
+[data-theme="google_material"] .btn-primary,
+[data-theme="google_material"] .btn-secondary {
+  border-radius: 9999px !important; /* Material Standard Pill Buttons */
+  box-shadow: none !important;
+  text-transform: none !important; /* Modern Google uses Title case, not heavy UPPERCASE */
+  letter-spacing: 0.025em !important;
+}
+
+[data-theme="google_material"] .btn-primary {
+  background-color: #1a73e8 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+[data-theme="google_material"] .btn-primary:hover {
+  background-color: #1557b0 !important;
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.2) !important;
+}
+
+[data-theme="google_material"] .btn-secondary {
+  border-color: #dadce0 !important;
+  color: #1a73e8 !important;
+  background-color: transparent !important;
+}
+
+[data-theme="google_material"] .btn-secondary:hover {
+  background-color: rgba(26, 115, 232, 0.04) !important;
+  border-color: #1a73e8 !important;
+}
+
+[data-theme="google_material"] .shadow-sm,
+[data-theme="google_material"] .shadow-inner,
+[data-theme="google_material"] .shadow-md,
+[data-theme="google_material"] .shadow,
+[data-theme="google_material"] .shadow-lg,
+[data-theme="google_material"] .shadow-xl,
+[data-theme="google_material"] .shadow-2xl {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
 }
