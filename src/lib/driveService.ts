@@ -3,7 +3,7 @@ import { collection, getDocs, query, where, doc, setDoc } from 'firebase/firesto
 import { auth, db } from './firebase';
 
 // Cache the access token in memory as required by guidelines
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('__google_access_token') : null;
 let cachedGoogleUser: any = null;
 
 export interface DriveBackupFile {
@@ -40,6 +40,12 @@ export const connectGoogleDrive = async (): Promise<{ user: User; accessToken: s
     cachedAccessToken = credential.accessToken;
     cachedGoogleUser = result.user;
     
+    try {
+      localStorage.setItem('__google_access_token', cachedAccessToken);
+    } catch (e) {
+      console.error(e);
+    }
+    
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error) {
     console.error('Lỗi kết nối Google Drive:', error);
@@ -68,6 +74,11 @@ export const getGoogleDriveToken = (): string | null => {
 export const setGoogleDriveToken = (token: string | null, googleUser?: any) => {
   cachedAccessToken = token;
   if (googleUser) cachedGoogleUser = googleUser;
+  if (token) {
+    try {
+      localStorage.setItem('__google_access_token', token);
+    } catch (e) {}
+  }
 };
 
 /**

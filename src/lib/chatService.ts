@@ -1,7 +1,7 @@
 import { GoogleAuthProvider, signInWithPopup, User } from 'firebase/auth';
 import { auth } from './firebase';
 
-let cachedChatAccessToken: string | null = null;
+let cachedChatAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('__google_access_token') : null;
 let cachedChatUser: any = null;
 
 /**
@@ -22,6 +22,12 @@ export const connectGoogleChat = async (): Promise<{ user: any; accessToken: str
     
     cachedChatAccessToken = credential.accessToken;
     cachedChatUser = result.user;
+    
+    try {
+      localStorage.setItem('__google_access_token', cachedChatAccessToken);
+    } catch (e) {
+      console.error(e);
+    }
     
     return { user: result.user, accessToken: cachedChatAccessToken };
   } catch (error) {
@@ -51,6 +57,11 @@ export const getGoogleChatToken = (): string | null => {
 export const setGoogleChatToken = (token: string | null, user?: any) => {
   cachedChatAccessToken = token;
   if (user) cachedChatUser = user;
+  if (token) {
+    try {
+      localStorage.setItem('__google_access_token', token);
+    } catch (e) {}
+  }
 };
 
 export interface ChatSpace {

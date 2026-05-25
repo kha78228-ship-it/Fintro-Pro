@@ -20,6 +20,7 @@ import {
   DriveBackupFile,
   DriveQuota
 } from '../lib/driveService';
+import { createBackupNotification } from '../lib/autoNotificationBuilder';
 
 interface SettingsProps {
   user?: any;
@@ -135,6 +136,12 @@ export default memo(function SettingsView({
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   
+  // Custom Personal Profile Details
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [birthdate, setBirthdate] = useState('');
+  const [bio, setBio] = useState('');
+  const [relationshipAnniversary, setRelationshipAnniversary] = useState('');
+  
   // Invite codes admin only
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -160,6 +167,7 @@ export default memo(function SettingsView({
   const [driveQuota, setDriveQuota] = useState<DriveQuota | null>(null);
   const [driveBackups, setDriveBackups] = useState<DriveBackupFile[]>([]);
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [backupSchedule, setBackupSchedule] = useState<'daily' | 'weekly' | 'startup'>('daily');
   const [lastBackupTime, setLastBackupTime] = useState('');
 
   // Loading status
@@ -206,6 +214,82 @@ export default memo(function SettingsView({
     }
   };
 
+  const handleScheduleChange = async (schedule: 'daily' | 'weekly' | 'startup') => {
+    if (!user) return;
+    try {
+      setBackupSchedule(schedule);
+      await setDoc(doc(db, 'users', user.uid), {
+        driveBackupSchedule: schedule
+      }, { merge: true });
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi khi sửa đổi tần suất sao lưu.');
+    }
+  };
+
+  // Perform automatic background backup based on schedule when component/drive is ready
+  useEffect(() => {
+    if (!user || !driveToken || !autoBackupEnabled) return;
+    
+    const checkAndRunAutoBackup = async () => {
+      if (isBackingUpFinancials) return;
+      
+      const nowMs = Date.now();
+      const lastBackupMs = lastBackupTime ? new Date(lastBackupTime).getTime() : 0;
+      const hoursSinceLastBackup = (nowMs - lastBackupMs) / (1000 * 60 * 60);
+      
+      let shouldBackup = false;
+      if (backupSchedule === 'startup') {
+        // Run once per app load if we haven't backed up in the last 10 minutes
+        shouldBackup = hoursSinceLastBackup > (10 / 60);
+      } else if (backupSchedule === 'daily') {
+        shouldBackup = hoursSinceLastBackup >= 24;
+      } else if (backupSchedule === 'weekly') {
+        shouldBackup = hoursSinceLastBackup >= (24 * 7);
+      }
+      
+      if (shouldBackup) {
+        console.log(`[Auto Backup] Starting background sync to Google Drive. Schedule limit matched: ${backupSchedule}`);
+        setIsBackingUpFinancials(true);
+        try {
+          const file = await uploadFinancialBackup(driveToken, user.uid, user.email || '');
+          setLastBackupTime(file.createdTime);
+          
+          const updatedBackups = await listDriveBackups(driveToken);
+          setDriveBackups(updatedBackups);
+          const updatedQuota = await getDriveStorageQuota(driveToken);
+          setDriveQuota(updatedQuota);
+          
+          await createBackupNotification(user.uid, file.name || 'Bản sao lưu tự động', 'auto');
+          console.log('[Auto Backup] Financial backup completed successfully in the background!');
+        } catch (err: any) {
+          console.warn('[Auto Backup] Failed background backup:', err);
+        } finally {
+          setIsBackingUpFinancials(false);
+        }
+      }
+    };
+    
+    const timer = setTimeout(() => {
+      checkAndRunAutoBackup();
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, [user, driveToken, autoBackupEnabled, backupSchedule, lastBackupTime]);
+
+  // Sync token from direct auth changes dynamically
+  useEffect(() => {
+    const checkToken = () => {
+      const token = getGoogleDriveToken();
+      if (token && token !== driveToken) {
+        setDriveTokenState(token);
+      }
+    };
+    checkToken();
+    const interval = setInterval(checkToken, 1000);
+    return () => clearInterval(interval);
+  }, [driveToken]);
+
   const handleBackupFinancials = async () => {
     if (!driveToken || !user) return;
     setIsBackingUpFinancials(true);
@@ -218,6 +302,7 @@ export default memo(function SettingsView({
       setDriveBackups(updatedBackups);
       const updatedQuota = await getDriveStorageQuota(driveToken);
       setDriveQuota(updatedQuota);
+      await createBackupNotification(user.uid, file.name || 'Financial_Backup', 'financials');
       alert('Sao lưu báo cáo tài chính lên Google Drive thành công!');
     } catch (err: any) {
       console.error(err);
@@ -240,6 +325,7 @@ export default memo(function SettingsView({
       setDriveBackups(updatedBackups);
       const updatedQuota = await getDriveStorageQuota(driveToken);
       setDriveQuota(updatedQuota);
+      await createBackupNotification(user.uid, 'Photo_Diary_Backup', 'photos');
       
       alert(`Đồng bộ ảnh hoàn tất! Đã tải lên ${stats.uploaded} ảnh mới, bỏ qua ${stats.skipped} ảnh đã tồn hành trên Drive.`);
     } catch (err: any) {
@@ -309,7 +395,12 @@ export default memo(function SettingsView({
              setIsCycleVisibleToPartner(data.isCycleVisibleToPartner || false);
              setRoomCode(data.friendCode || '');
              setAutoBackupEnabled(data.driveAutoBackupEnabled || false);
+             setBackupSchedule(data.driveBackupSchedule || 'daily');
              setLastBackupTime(data.driveLastBackupTime || '');
+             setPhoneNumber(data.phoneNumber || '');
+             setBirthdate(data.birthdate || '');
+             setBio(data.bio || '');
+             setRelationshipAnniversary(data.relationshipAnniversary || '');
            }
         });
 
@@ -381,8 +472,29 @@ export default memo(function SettingsView({
      setIsSavingProfile(true);
      try {
         await updateProfile(user, { displayName, photoURL });
-        await setDoc(doc(db, 'users', user.uid), { displayName, photoURL, nickname, gender, isCycleVisibleToPartner }, { merge: true });
-        await setDoc(doc(db, 'publicProfiles', user.uid), { displayName, photoURL, status: 'online', gender, isCycleVisibleToPartner }, { merge: true });
+        await setDoc(doc(db, 'users', user.uid), { 
+           displayName, 
+           photoURL, 
+           nickname, 
+           gender, 
+           isCycleVisibleToPartner,
+           phoneNumber,
+           birthdate,
+           bio,
+           relationshipAnniversary
+        }, { merge: true });
+        await setDoc(doc(db, 'publicProfiles', user.uid), { 
+           displayName, 
+           photoURL, 
+           status: 'online', 
+           gender, 
+           isCycleVisibleToPartner,
+           nickname,
+           phoneNumber,
+           birthdate,
+           bio,
+           relationshipAnniversary
+        }, { merge: true });
         alert('Cập nhật tài khoản thành công!');
      } catch (e) {
         handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
@@ -559,7 +671,7 @@ export default memo(function SettingsView({
                </div>
                <div className="space-y-4">
                   <div className="flex items-center gap-4">
-                     <div className="w-20 h-20 rounded-full flex items-center justify-center shrink-0 overflow-hidden border-2 border-neo-dark bg-neo-light hover:shadow-[2px_2px_0_var(--color-neo-dark)] transition-all">
+                     <div className="w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-2 border-neo-dark bg-neo-light hover:shadow-[2px_2px_0_var(--color-neo-dark)] transition-all">
                         <AIAvatar
                           uid={user?.uid}
                           name={displayName || user?.email}
@@ -617,12 +729,28 @@ export default memo(function SettingsView({
                            <option value="female">Nữ</option>
                         </select>
                      </div>
+                     <div>
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Số điện thoại</label>
+                        <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="Ví dụ: 0912345678" className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
+                     </div>
+                     <div>
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Ngày sinh</label>
+                        <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
+                     </div>
+                     <div>
+                        <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Ngày đặc biệt / Kỷ niệm</label>
+                        <input type="date" value={relationshipAnniversary} onChange={(e) => setRelationshipAnniversary(e.target.value)} className="w-full bg-neutral-50 border border-neutral-200 rounded-3xl px-4 py-2 text-sm" />
+                     </div>
                      {gender === 'female' && (
                        <div className="flex items-center gap-2 pt-6">
                           <input type="checkbox" checked={isCycleVisibleToPartner} onChange={(e) => setIsCycleVisibleToPartner(e.target.checked)} className="rounded text-neutral-600 focus:ring-neutral-500" />
                           <label className="text-sm text-neutral-700">Chia sẻ kỳ kinh nguyệt với người yêu</label>
                        </div>
                      )}
+                  </div>
+                  <div>
+                     <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Lời giới thiệu & Châm ngôn tình yêu</label>
+                     <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Hãy chia sẻ đôi lời về bản thân hoặc một lời nhắn ngọt ngào dành cho đối phương..." rows={3} className="w-full bg-neutral-50 border border-neutral-200 rounded-[1.5rem] px-4 py-3 text-sm resize-none" />
                   </div>
                   <div>
                      <label className="text-xs font-semibold text-neutral-500 uppercase tracking-widest block mb-1">Mã tham gia không gian chung (3 số)</label>
@@ -688,7 +816,7 @@ export default memo(function SettingsView({
                         onClick={() => setAppTheme('google_material')}
                         className={`text-[10px] uppercase font-bold py-3.5 px-4 rounded-3xl border border-neo-dark transition-all text-left flex justify-between items-center ${appTheme === 'google_material' ? 'bg-neo-orange text-white' : 'bg-neo-bg text-neo-dark hover:bg-neo-orange hover:text-white'}`}
                       >
-                        Google Material
+                        Driv
                         {appTheme === 'google_material' && <Check className="w-4 h-4" />}
                       </button>
                     </div>
@@ -1276,7 +1404,7 @@ export default memo(function SettingsView({
                          <div key={adm.id} className={`p-4 rounded-3xl border ${isExpired ? 'bg-neutral-50 border-neutral-200' : 'bg-white border-neutral-200 shadow-sm'} flex items-center justify-between`}>
                             <div className="flex items-center gap-3">
                                <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center shrink-0">
-                                  <Shield className="w-5 h-5 text-neutral-500" />
+                                  <AIAvatar uid={adm.id} name={usrInfo ? usrInfo.displayName : undefined} photoURL={usrInfo ? usrInfo.photoURL : undefined} className="w-full h-full border border-neutral-100 rounded-full" />
                                </div>
                                <div>
                                   <div className="font-bold text-neutral-900 mb-0.5">{usrInfo ? usrInfo.displayName : adm.id}</div>
@@ -1428,7 +1556,7 @@ export default memo(function SettingsView({
                       <div className="space-y-1">
                         <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest block font-display">Cloud Backup</span>
                         <h4 className="font-bold text-neutral-950 text-base">Tự động sao lưu lên đám mây</h4>
-                        <p className="text-xs text-neutral-500">Đồng bộ tự động báo cáo mới nhất mỗi khi tải ứng dụng.</p>
+                        <p className="text-xs text-neutral-500">Đồng bộ tự động báo cáo mới nhất theo lịch trình được cài đặt.</p>
                       </div>
                       <button 
                          onClick={() => handleToggleAutoBackup(!autoBackupEnabled)}
@@ -1437,10 +1565,52 @@ export default memo(function SettingsView({
                          <motion.div layout className="w-5 h-5 rounded-full bg-white shadow-sm" />
                       </button>
                     </div>
+
+                    {autoBackupEnabled && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }} 
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="space-y-3 pt-3 border-t border-blue-100/50"
+                      >
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest pl-1 font-mono">Lịch Trình Sao Lưu</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { id: 'startup', label: 'Tải app', desc: 'Mỗi lần khởi chạy' },
+                            { id: 'daily', label: 'Hằng ngày', desc: 'Sau mỗi 24 giờ' },
+                            { id: 'weekly', label: 'Hằng tuần', desc: 'Sau mỗi 7 ngày' }
+                          ].map((sched) => {
+                            const isSelected = backupSchedule === sched.id;
+                            return (
+                              <button
+                                key={sched.id}
+                                type="button"
+                                onClick={() => handleScheduleChange(sched.id as any)}
+                                className={`flex flex-col items-center justify-center py-2 px-3 rounded-2xl border transition-all text-center ${
+                                  isSelected 
+                                    ? 'bg-blue-600 border-blue-700 text-white shadow-sm scale-[1.02]' 
+                                    : 'bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300'
+                                }`}
+                              >
+                                <span className="text-xs font-bold uppercase tracking-wider">{sched.label}</span>
+                                <span className={`text-[8px] mt-0.5 font-medium ${isSelected ? 'text-blue-100' : 'text-neutral-400'}`}>{sched.desc}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
                     {lastBackupTime && (
-                      <div className="text-xs text-neutral-500 flex items-center gap-1 font-mono pt-1 border-t border-blue-100/50">
-                        <span>Lần sao lưu cuối:</span>
-                        <span className="font-bold text-neutral-800">{new Date(lastBackupTime).toLocaleString()}</span>
+                      <div className="text-xs text-neutral-500 flex items-center justify-between font-mono pt-2.5 border-t border-blue-100/50">
+                        <div className="flex items-center gap-1">
+                          <span>Lần sao lưu cuối:</span>
+                          <span className="font-bold text-neutral-800">{new Date(lastBackupTime).toLocaleString()}</span>
+                        </div>
+                        {isBackingUpFinancials && (
+                          <span className="text-blue-600 flex items-center gap-1 font-bold animate-pulse text-[10px]">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Đang sao lưu...
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>

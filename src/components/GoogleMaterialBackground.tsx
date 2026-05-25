@@ -112,8 +112,17 @@ export function GoogleMaterialBackground() {
 
   return (
     <div className={`fixed inset-0 z-[-5] transition-colors duration-[1500ms] overflow-hidden ${theme.bgClass}`}>
+      {/* Real-time Flowing Google AI Liquid Gradient Backdrop Layer (Giao diên Loang Advanced) */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden opacity-40 mix-blend-color-burn dark:mix-blend-color-dodge transition-opacity duration-1000">
+        <div className="absolute top-[-15%] left-[-10%] w-[70vw] h-[70vw] rounded-full blur-[110px] animate-liquid-1" style={{ backgroundImage: "radial-gradient(circle, rgba(66, 133, 244, 0.45) 0%, transparent 70%)" }} />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[65vw] h-[65vw] rounded-full blur-[100px] animate-liquid-2" style={{ backgroundImage: "radial-gradient(circle, rgba(234, 67, 53, 0.4) 0%, transparent 70%)" }} />
+        <div className="absolute top-[30%] right-[20%] w-[55vw] h-[55vw] rounded-full blur-[90px] animate-liquid-3" style={{ backgroundImage: "radial-gradient(circle, rgba(251, 188, 5, 0.35) 0%, transparent 70%)" }} />
+        <div className="absolute bottom-[20%] left-[10%] w-[60vw] h-[60vw] rounded-full blur-[100px] animate-liquid-4" style={{ backgroundImage: "radial-gradient(circle, rgba(52, 168, 83, 0.35) 0%, transparent 70%)" }} />
+        <div className="absolute top-[10%] left-[25%] w-[50vw] h-[50vw] rounded-full blur-[90px] animate-liquid-5" style={{ backgroundImage: "radial-gradient(circle, rgba(161, 66, 244, 0.4) 0%, transparent 70%)" }} />
+      </div>
+
       {/* Dynamic Animated Ambient Light Blobs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 filter blur-[80px] md:blur-[120px] opacity-80 mix-blend-multiply">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 filter blur-[80px] md:blur-[120px] opacity-75 mix-blend-multiply">
         <AnimatePresence mode="popLayout">
           {theme.blobs.map((blob, idx) => (
             <motion.div
@@ -212,9 +221,40 @@ export function GoogleMaterialBackground() {
         </div>
       </div>
 
-      {/* Global CSS Injector to automatically override variables if period is Night */}
-      {period === "night" && (
-        <style>{`
+      {/* Global CSS Injector to automatically override variables and provide liquid keyframes */}
+      <style>{`
+        @keyframes liquid-1 {
+          0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+          50% { transform: translate(80px, -60px) scale(1.15) rotate(180deg); }
+          100% { transform: translate(0px, 0px) scale(1) rotate(360deg); }
+        }
+        @keyframes liquid-2 {
+          0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+          50% { transform: translate(-70px, 70px) scale(1.1) rotate(-180deg); }
+          100% { transform: translate(0px, 0px) scale(1) rotate(-360deg); }
+        }
+        @keyframes liquid-3 {
+          0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+          50% { transform: translate(60px, 80px) scale(0.9) rotate(120deg); }
+          100% { transform: translate(0px, 0px) scale(1) rotate(360deg); }
+        }
+        @keyframes liquid-4 {
+          0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+          50% { transform: translate(-80px, -80px) scale(1.1) rotate(-120deg); }
+          100% { transform: translate(0px, 0px) scale(1) rotate(-360deg); }
+        }
+        @keyframes liquid-5 {
+          0% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+          50% { transform: translate(70px, 70px) scale(1.15) rotate(180deg); }
+          100% { transform: translate(0px, 0px) scale(1) rotate(360deg); }
+        }
+        .animate-liquid-1 { animation: liquid-1 25s infinite ease-in-out; }
+        .animate-liquid-2 { animation: liquid-2 28s infinite ease-in-out; }
+        .animate-liquid-3 { animation: liquid-3 32s infinite ease-in-out; }
+        .animate-liquid-4 { animation: liquid-4 22s infinite ease-in-out; }
+        .animate-liquid-5 { animation: liquid-5 30s infinite ease-in-out; }
+
+        ${period === "night" ? `
           [data-theme="google_material"] {
             --color-neo-bg: #121316 !important;
             --color-neo-dark: #f1f3f4 !important;
@@ -261,8 +301,8 @@ export function GoogleMaterialBackground() {
           [data-theme="google_material"] .bg-neutral-50 {
             background-color: #2a2b2e !important;
           }
-        `}</style>
-      )}
+        ` : ""}
+      `}</style>
     </div>
   );
 }

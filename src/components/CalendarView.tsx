@@ -2,21 +2,32 @@ import React, { useState, useMemo, useEffect, memo } from 'react';
 import { Transaction, TransactionType } from '../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addDays, subDays, isToday, startOfWeek, endOfWeek, differenceInDays, parseISO, startOfDay, endOfDay, subYears, addYears, eachMonthOfInterval, startOfYear, endOfYear, isSameYear } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Trash2, Heart, Check, X, ArrowUp, ArrowDown, MapPin, GraduationCap, Map as MapIcon, Users, Plus, Copy, Link } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Trash2, Heart, Check, X, ArrowUp, ArrowDown, MapPin, GraduationCap, Map as MapIcon, Users, Plus, Copy, Link, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { User } from 'firebase/auth';
 import { useCurrency } from '../lib/CurrencyContext';
+import { 
+  getWorkspaceToken, 
+  setWorkspaceToken, 
+  connectWorkspace, 
+  listCalendarEvents, 
+  createCalendarEvent, 
+  deleteCalendarEvent 
+} from '../lib/workspaceServices';
 
 interface CalendarEvent {
   id: string;
   date: string;
   title: string;
-  type: 'school' | 'outing' | 'other' | 'anniversary';
+  type: 'school' | 'outing' | 'other' | 'anniversary' | 'google';
   time: string;
   createdBy?: string;
   creatorName?: string;
+  isGoogle?: boolean;
+  googleId?: string;
+  location?: string;
 }
 
 interface CalendarViewProps {
@@ -38,9 +49,98 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
   const [eventsLoaded, setEventsLoaded] = useState(false);
   const [sharedFundId, setSharedFundId] = useState<string | null>(null);
 
+  // Google Calendar Integration states
+  const [googleEvents, setGoogleEvents] = useState<any[]>([]);
+  const [googleToken, setGoogleToken] = useState<string | null>(getWorkspaceToken());
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleConnecting, setIsGoogleConnecting] = useState(false);
+  const [eventTarget, setEventTarget] = useState<'family' | 'google'>('family');
+  const [newEventLocation, setNewEventLocation] = useState('');
+
+  const fetchGoogleCalendarEvents = async (token: string) => {
+    setIsGoogleLoading(true);
+    try {
+      const items = await listCalendarEvents(token);
+      setGoogleEvents(items);
+    } catch (err) {
+      console.error('Error listing Google Calendar events:', err);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (googleToken) {
+      fetchGoogleCalendarEvents(googleToken);
+    }
+  }, [googleToken]);
+
+  const handleConnectGoogle = async () => {
+    setIsGoogleConnecting(true);
+    try {
+      const res = await connectWorkspace(['https://www.googleapis.com/auth/calendar']);
+      if (res?.accessToken) {
+        setGoogleToken(res.accessToken);
+        setWorkspaceToken(res.accessToken, res.user);
+        fetchGoogleCalendarEvents(res.accessToken);
+      }
+    } catch (err) {
+      console.error('Connection to Google failed:', err);
+    } finally {
+      setIsGoogleConnecting(false);
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    setGoogleToken(null);
+    setWorkspaceToken(null);
+    setGoogleEvents([]);
+  };
+
+  const handleRefreshGoogleEvents = () => {
+    if (googleToken) {
+      fetchGoogleCalendarEvents(googleToken);
+    }
+  };
+
+  const handleDeleteGoogleEvent = async (googleEventId: string, title: string) => {
+    if (!googleToken) return;
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn xóa sự kiện "${title}" khỏi Google Calendar?`);
+    if (!confirmed) return;
+    
+    setIsGoogleLoading(true);
+    try {
+      await deleteCalendarEvent(googleToken, googleEventId);
+      setGoogleEvents(prev => prev.filter(e => e.id !== googleEventId));
+    } catch (err: any) {
+      alert('Không thể xóa sự kiện Google: ' + err.message);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const formattedGoogleEvents = useMemo(() => {
+    return googleEvents.map(gev => {
+      const startDateTime = gev.start?.dateTime || gev.start?.date || '';
+      const dateStr = startDateTime ? startDateTime.substring(0, 10) : '';
+      const timeStr = gev.start?.dateTime ? startDateTime.substring(11, 16) : '00:00';
+      return {
+        id: 'google_' + gev.id,
+        googleId: gev.id,
+        date: dateStr,
+        title: gev.summary || 'Sự kiện Google',
+        type: 'google' as const,
+        time: timeStr,
+        isGoogle: true,
+        description: gev.description || '',
+        location: gev.location || ''
+      };
+    });
+  }, [googleEvents]);
+
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [eventForm, setEventForm] = useState<{title: string, type: 'school' | 'outing' | 'other' | 'anniversary', time: string}>({
+  const [eventForm, setEventForm] = useState<{title: string, type: 'school' | 'outing' | 'other' | 'anniversary' | 'google', time: string}>({
      title: '', type: 'outing', time: '08:00'
   });
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
@@ -255,14 +355,18 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
     return result;
   }, [events, filterType, filterTime, filterCreator, sortBy, user, currentDate]);
 
+  const combinedEvents = useMemo(() => {
+    return [...filteredAndSortedEvents, ...formattedGoogleEvents];
+  }, [filteredAndSortedEvents, formattedGoogleEvents]);
+
   const eventsByDate = useMemo(() => {
-    const grouped: Record<string, CalendarEvent[]> = {};
-    filteredAndSortedEvents.forEach(e => {
+    const grouped: Record<string, any[]> = {};
+    combinedEvents.forEach(e => {
       if (!grouped[e.date]) grouped[e.date] = [];
       grouped[e.date].push(e);
     });
     return grouped;
-  }, [filteredAndSortedEvents]);
+  }, [combinedEvents]);
 
   const selectedTransactions = useMemo(() => {
     if (!selection) return [];
@@ -552,6 +656,51 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
             </div>
           </div>
 
+          {/* Google Calendar Sync Bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 mb-6 rounded-3xl bg-blue-50/50 border border-blue-100/60 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center border border-blue-200">
+                <CalendarIcon className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h5 className="text-sm font-bold text-neutral-800">Đồng bộ Google Calendar</h5>
+                <p className="text-[11px] text-neutral-500 font-medium">Lập kế hoạch và xem lịch trình cá nhân / công việc trên cùng một lịch</p>
+              </div>
+            </div>
+            
+            <div className="flex gap-2 items-center shrink-0">
+              {isGoogleLoading && <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />}
+              {googleToken ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full font-bold flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Đã kết nối
+                  </span>
+                  <button 
+                    onClick={handleRefreshGoogleEvents} 
+                    disabled={isGoogleLoading}
+                    className="px-3 py-1 text-xs font-bold text-neutral-600 bg-white border border-neutral-200 rounded-3xl hover:bg-neutral-50 shadow-xs transition-all active:scale-95 cursor-pointer"
+                  >
+                    Làm mới
+                  </button>
+                  <button 
+                    onClick={handleDisconnectGoogle} 
+                    className="px-3 py-1 text-xs font-bold text-orange-600 hover:bg-orange-50 rounded-3xl transition-all"
+                  >
+                    Ngắt
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={handleConnectGoogle} 
+                  disabled={isGoogleConnecting}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-3xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                >
+                  {isGoogleConnecting ? 'Đang kết nối...' : 'Kết nối Lịch Google'}
+                </button>
+              )}
+            </div>
+          </div>
+
           {viewMode === 'month' || viewMode === 'week' ? (
             <>
               <div className="grid grid-cols-7 gap-2 sm:gap-4 mb-4">
@@ -644,15 +793,16 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                            {dayEvents.map(e => (
                               <div 
                                 key={e.id} 
-                                draggable
+                                draggable={!e.isGoogle}
                                 onDragStart={(evt) => {
+                                  if (e.isGoogle) return;
                                   evt.dataTransfer.setData('text/plain', e.id);
                                   evt.stopPropagation();
                                 }}
-                                className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-orange-100 bg-orange-100 text-orange-600 flex items-center justify-center cursor-move"
-                                title={e.title}
+                                className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full flex items-center justify-center ${e.isGoogle ? 'bg-blue-100 text-blue-600 border border-blue-200' : 'bg-orange-100 text-orange-600'} ${!e.isGoogle ? 'cursor-move' : ''}`}
+                                title={`${e.isGoogle ? '📅 (Lịch Google) ' : ''}${e.title}`}
                               >
-                                 {e.type === 'school' ? <GraduationCap className="w-2.5 h-2.5" /> : e.type === 'outing' ? <MapIcon className="w-2.5 h-2.5" /> : e.type === 'anniversary' ? <Heart className="w-2.5 h-2.5 fill-orange-200 text-orange-500" /> : <MapPin className="w-2.5 h-2.5" />}
+                                 {e.isGoogle ? <CalendarIcon className="w-2.5 h-2.5 text-blue-500" /> : e.type === 'school' ? <GraduationCap className="w-2.5 h-2.5" /> : e.type === 'outing' ? <MapIcon className="w-2.5 h-2.5" /> : e.type === 'anniversary' ? <Heart className="w-2.5 h-2.5 fill-orange-200 text-orange-500" /> : <MapPin className="w-2.5 h-2.5" />}
                               </div>
                            ))}
                         </div>
@@ -903,74 +1053,175 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                           <input type="text" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} placeholder="Tên hoạt động..." className="w-full bg-white border border-neutral-200 px-3 py-2 rounded-3xl text-sm outline-none focus:border-neutral-500" />
                           <div className="flex gap-2">
                             <input type="time" value={eventForm.time} onChange={e => setEventForm({...eventForm, time: e.target.value})} className="bg-white border border-neutral-200 px-2 py-1.5 rounded-3xl text-sm outline-none" />
-                            <select value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})} className="flex-1 bg-white border border-neutral-200 px-2 py-1.5 rounded-3xl text-sm outline-none">
+                            <select value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})} className="flex-1 bg-white border border-neutral-200 px-2 py-1.5 rounded-3xl text-sm outline-none" disabled={eventTarget === 'google'}>
                               <option value="school">Đi học / Công việc</option>
                               <option value="outing">Đi chơi</option>
                               <option value="anniversary">Kỷ niệm / Quan trọng</option>
                               <option value="other">Khác</option>
                             </select>
                           </div>
+
+                          <div className="space-y-2 pt-1 border-t border-neutral-100">
+                            <div className="flex gap-4 items-center">
+                              <span className="text-xs font-bold text-neutral-500">Lưu vào:</span>
+                              <label className="flex items-center gap-1.5 text-xs text-neutral-700 cursor-pointer">
+                                <input type="radio" checked={eventTarget === 'family'} onChange={() => setEventTarget('family')} className="accent-neutral-700" />
+                                <span>Lịch Gia đình</span>
+                              </label>
+                              {googleToken && (
+                                <label className="flex items-center gap-1.5 text-xs text-neutral-700 cursor-pointer">
+                                  <input type="radio" checked={eventTarget === 'google'} onChange={() => setEventTarget('google')} className="accent-blue-600" />
+                                  <span className="text-blue-600 font-bold flex items-center gap-0.5">Google Calendar</span>
+                                </label>
+                              )}
+                            </div>
+                            {eventTarget === 'google' && (
+                              <input 
+                                type="text" 
+                                value={newEventLocation} 
+                                onChange={e => setNewEventLocation(e.target.value)} 
+                                placeholder="Địa điểm sự kiện (Tùy chọn)..." 
+                                className="w-full bg-white border border-neutral-200 px-3 py-1.5 rounded-3xl text-xs outline-none focus:border-neutral-500" 
+                              />
+                            )}
+                          </div>
                           <div className="flex gap-2 justify-end">
                             <button onClick={() => setShowEventForm(false)} className="px-3 py-1.5 text-xs font-semibold text-neutral-500 hover:text-neutral-700">Hủy</button>
                             <button 
-                              onClick={() => {
+                              onClick={async () => {
                                 if(!eventForm.title) return;
-                                if(editingEventId) {
-                                  setEvents(events.map(e => e.id === editingEventId ? {...e, ...eventForm} : e));
+                                if (eventTarget === 'google' && googleToken) {
+                                  setIsGoogleLoading(true);
+                                  try {
+                                    const startDateTimeStr = `${format(selection.start, 'yyyy-MM-dd')}T${eventForm.time}:00`;
+                                    const timeParts = eventForm.time.split(':');
+                                    let endHour = parseInt(timeParts[0]) + 1;
+                                    let endMin = timeParts[1];
+                                    if (endHour >= 24) {
+                                      endHour = 23;
+                                      endMin = '59';
+                                    }
+                                    const endDateTimeStr = `${format(selection.start, 'yyyy-MM-dd')}T${endHour.toString().padStart(2, '0')}:${endMin}:00`;
+                                    
+                                    await createCalendarEvent(googleToken, {
+                                      summary: eventForm.title,
+                                      location: newEventLocation,
+                                      start: {
+                                        dateTime: new Date(startDateTimeStr).toISOString(),
+                                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                                      },
+                                      end: {
+                                        dateTime: new Date(endDateTimeStr).toISOString(),
+                                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                                      }
+                                    });
+                                    setNewEventLocation('');
+                                    setShowEventForm(false);
+                                    fetchGoogleCalendarEvents(googleToken);
+                                  } catch (err: any) {
+                                    alert('Lỗi tạo sự kiện Google: ' + err.message);
+                                  } finally {
+                                    setIsGoogleLoading(false);
+                                  }
                                 } else {
-                                  setEvents([...events, {
-                                    id: Date.now().toString(), 
-                                    date: format(selection.start, 'yyyy-MM-dd'), 
-                                    ...eventForm,
-                                    createdBy: user?.uid || 'local',
-                                    creatorName: user?.displayName || user?.email?.split('@')[0] || 'Gia đình'
-                                  }]);
+                                  if(editingEventId) {
+                                    setEvents(events.map(e => e.id === editingEventId ? {...e, ...eventForm} : e));
+                                  } else {
+                                    setEvents([...events, {
+                                      id: Date.now().toString(), 
+                                      date: format(selection.start, 'yyyy-MM-dd'), 
+                                      ...eventForm,
+                                      createdBy: user?.uid || 'local',
+                                      creatorName: user?.displayName || user?.email?.split('@')[0] || 'Gia đình'
+                                    }]);
+                                  }
+                                  setShowEventForm(false);
                                 }
-                                setShowEventForm(false);
                               }} 
-                              className="px-3 py-1.5 text-xs font-semibold bg-neutral-600 text-white rounded-3xl hover:bg-neutral-700"
+                              className="px-3 py-1.5 text-xs font-bold bg-neutral-800 text-white rounded-3xl hover:bg-neutral-900 transition-all active:scale-95"
                             >Lưu</button>
                           </div>
                         </div>
                       )}
                       
                       {selectedEvents.length === 0 && !showEventForm && (
-                        <p className="text-xs text-neutral-400 italic">Chưa có lịch trình.</p>
+                        <p className="text-xs text-neutral-400 italic text-center py-2">Chưa có lịch trình.</p>
                       )}
                       
-                      {selectedEvents.map(e => (
-                        <div 
-                          key={e.id} 
-                          draggable
-                          onDragStart={(evt) => {
-                            evt.dataTransfer.setData('text/plain', e.id);
-                          }}
-                          className="group flex justify-between items-center p-3 bg-orange-50 rounded-3xl border border-orange-100 hover:border-orange-200 transition-colors cursor-move"
-                        >
-                          <div className="flex gap-3 items-center">
-                            <div className="w-10 h-10 bg-orange-100 rounded-full text-orange-600 flex items-center justify-center">
-                              {e.type === 'school' ? <GraduationCap className="w-4 h-4" /> : e.type === 'outing' ? <MapIcon className="w-4 h-4" /> : e.type === 'anniversary' ? <Heart className="w-4 h-4 fill-orange-200 text-orange-500" /> : <MapPin className="w-4 h-4" />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-neutral-800">{e.title}</p>
-                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                 <span className="text-[10px] text-neutral-500 bg-neutral-200/55 px-1.5 py-0.5 rounded-3xl font-medium">
-                                    🕒 {e.time}
-                                 </span>
-                                 {e.creatorName && (
-                                    <span className="text-[10px] text-orange-600 bg-orange-100/30 border border-orange-100/50 px-1.5 py-0.5 rounded-3xl font-semibold">
-                                       👤 {e.creatorName}
-                                    </span>
-                                 )}
+                      {selectedEvents.map(e => {
+                        if (e.isGoogle) {
+                          return (
+                            <div 
+                              key={e.id} 
+                              className="group flex justify-between items-center p-3 bg-blue-50/70 border border-blue-100 hover:border-blue-200 rounded-3xl transition-colors animate-fade-in"
+                            >
+                              <div className="flex gap-3 items-center min-w-0 flex-1">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                                  <CalendarIcon className="w-4 h-4 text-blue-500" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-bold text-neutral-800 truncate">{e.title}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                     <span className="text-[10px] text-blue-600 bg-blue-100/50 px-1.5 py-0.5 rounded-3xl font-semibold">
+                                        🕒 {e.time}
+                                     </span>
+                                     <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-3xl font-semibold">
+                                        Google Calendar
+                                     </span>
+                                     {e.location && (
+                                        <span className="text-[10px] text-neutral-500 max-w-[150px] truncate" title={e.location}>
+                                           📍 {e.location}
+                                        </span>
+                                     )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-100 shrink-0">
+                                <button 
+                                  onClick={() => handleDeleteGoogleEvent(e.googleId, e.title)} 
+                                  className="text-xs text-red-600 hover:bg-red-50 px-2.5 py-1 rounded-3xl transition-all"
+                                >
+                                  Xóa
+                                </button>
                               </div>
                             </div>
+                          );
+                        }
+
+                        return (
+                          <div 
+                            key={e.id} 
+                            draggable
+                            onDragStart={(evt) => {
+                              evt.dataTransfer.setData('text/plain', e.id);
+                            }}
+                            className="group flex justify-between items-center p-3 bg-orange-50 rounded-3xl border border-orange-100 hover:border-orange-200 transition-colors cursor-move"
+                          >
+                            <div className="flex gap-3 items-center">
+                              <div className="w-10 h-10 bg-orange-100 rounded-full text-orange-600 flex items-center justify-center">
+                                {e.type === 'school' ? <GraduationCap className="w-4 h-4 text-orange-600" /> : e.type === 'outing' ? <MapIcon className="w-4 h-4 text-orange-600" /> : e.type === 'anniversary' ? <Heart className="w-4 h-4 fill-orange-200 text-orange-500" /> : <MapPin className="w-4 h-4 text-orange-600" />}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-neutral-800">{e.title}</p>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                   <span className="text-[10px] text-neutral-500 bg-neutral-200/55 px-1.5 py-0.5 rounded-3xl font-medium">
+                                      🕒 {e.time}
+                                   </span>
+                                   {e.creatorName && (
+                                      <span className="text-[10px] text-orange-600 bg-orange-100/30 border border-orange-100/50 px-1.5 py-0.5 rounded-3xl font-semibold">
+                                         👤 {e.creatorName}
+                                      </span>
+                                   )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-all">
+                              <button onClick={() => { setEventForm({title: e.title, time: e.time, type: e.type}); setEditingEventId(e.id); setEventTarget('family'); setShowEventForm(true); }} className="text-xs text-neutral-600 hover:bg-neutral-50 p-1.5 rounded-3xl">Sửa</button>
+                              <button onClick={() => setEvents(events.filter(ev => ev.id !== e.id))} className="text-xs text-orange-600 hover:bg-orange-50 p-1.5 rounded-3xl">Xóa</button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 opacity-100 group-hover:opacity-100 md:opacity-0 transition-opacity">
-                            <button onClick={() => { setEventForm({title: e.title, time: e.time, type: e.type}); setEditingEventId(e.id); setShowEventForm(true); }} className="text-xs text-neutral-600 hover:bg-neutral-50 p-1.5 rounded-3xl">Sửa</button>
-                            <button onClick={() => setEvents(events.filter(ev => ev.id !== e.id))} className="text-xs text-orange-600 hover:bg-orange-50 p-1.5 rounded-3xl">Xóa</button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     
                     {/* Giao dịch Section */}

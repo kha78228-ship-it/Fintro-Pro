@@ -7,7 +7,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
 
 interface Notification {
   id: string;
-  type: 'message' | 'friend_request' | 'event' | 'finance_add' | 'finance_sub' | 'love' | 'group' | 'entertainment';
+  type: 'message' | 'friend_request' | 'event' | 'finance_add' | 'finance_sub' | 'love' | 'group' | 'entertainment' | 'backup' | 'calendar_reminder' | 'period_reminder';
   title: string;
   description: string;
   time: string;
@@ -58,7 +58,7 @@ export default function NotificationCenter({ onNavigate }: { onNavigate?: (view:
     unreadNotifs.forEach(n => {
        const ref = doc(db, `users/${auth.currentUser!.uid}/notifications`, n.id);
        batch.update(ref, { read: true });
-    });
+     });
     try {
       await batch.commit();
     } catch (error) {
@@ -86,10 +86,13 @@ export default function NotificationCenter({ onNavigate }: { onNavigate?: (view:
       case 'message': return <MessageCircle className="w-5 h-5" />;
       case 'friend_request': return <UserPlus className="w-5 h-5" />;
       case 'event': return <Calendar className="w-5 h-5" />;
+      case 'calendar_reminder': return <Calendar className="w-5 h-5" />;
       case 'finance_add': return <ArrowDownToLine className="w-5 h-5" />;
       case 'finance_sub': return <ArrowUpFromLine className="w-5 h-5" />;
       case 'love': return <Heart className="w-5 h-5" />;
+      case 'period_reminder': return <Heart className="w-5 h-5 fill-rose-100" />;
       case 'entertainment': return <Gamepad2 className="w-5 h-5" />;
+      case 'backup': return <ArrowDownToLine className="w-5 h-5" />;
       default: return <AlertCircle className="w-5 h-5" />;
     }
   };
@@ -99,10 +102,13 @@ export default function NotificationCenter({ onNavigate }: { onNavigate?: (view:
       case 'message': return 'bg-blue-100 text-blue-600 border-blue-200';
       case 'friend_request': return 'bg-teal-100 text-teal-600 border-teal-200';
       case 'event': return 'bg-purple-100 text-purple-600 border-purple-200';
+      case 'calendar_reminder': return 'bg-indigo-100 text-indigo-600 border-indigo-200';
       case 'finance_add': return 'bg-green-100 text-green-600 border-green-200';
       case 'finance_sub': return 'bg-red-100 text-red-600 border-red-200';
       case 'love': return 'bg-pink-100 text-pink-600 border-pink-200';
+      case 'period_reminder': return 'bg-rose-100 text-rose-600 border-rose-200';
       case 'entertainment': return 'bg-orange-100 text-orange-600 border-orange-200';
+      case 'backup': return 'bg-cyan-100 text-cyan-600 border-cyan-200';
       default: return 'bg-neutral-100 text-neutral-600 border-neutral-200';
     }
   };
@@ -169,6 +175,9 @@ export default function NotificationCenter({ onNavigate }: { onNavigate?: (view:
                     if (onNavigate) {
                       if (notif.type.startsWith('finance')) onNavigate('history');
                       else if (notif.type === 'love') onNavigate('love_memory');
+                      else if (notif.type === 'period_reminder') onNavigate('cycle');
+                      else if (notif.type === 'calendar_reminder') onNavigate('calendar');
+                      else if (notif.type === 'backup') onNavigate('settings');
                       else if (notif.type === 'entertainment') onNavigate('couple_games');
                       else if (notif.type === 'message' || notif.type === 'friend_request') onNavigate('social_feed');
                     }

@@ -33,6 +33,7 @@ export default memo(function TransactionForm({ isOpen, onClose, inline, onSucces
   const [aiError, setAiError] = useState('');
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
   const [smartText, setSmartText] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +327,7 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
         description,
         date: new Date(date).toISOString(),
         userId: auth.currentUser.uid,
+        ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
         ...(isRecurring ? { isRecurring, recurringPeriod } : {}),
       };
 
@@ -337,7 +339,7 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
         await addDoc(collection(db, notifPath), {
           type: type === 'income' ? 'finance_add' : 'finance_sub',
           title: type === 'income' ? 'Nhận tiền' : 'Chi tiêu',
-          description: `${type === 'income' ? '+' : '-'} ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transactionData.amount)} cho ${description || 'khoản chi/thu'}`,
+          description: `${type === 'income' ? '+' : '-'} ${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transactionData.amount)} cho ${description || 'khoản chi/thu'}${promoCode.trim() ? ` (Áp dụng mã: ${promoCode})` : ''}`,
           time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
           read: false,
           createdAt: Date.now()
@@ -351,6 +353,7 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
       // Reset
       setAmount('');
       setDescription('');
+      setPromoCode('');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     } finally {
@@ -543,6 +546,58 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
                 <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="flex justify-between items-center px-1">
+            <label className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Mã giảm giá</label>
+            {promoCode.trim() && (
+              <span className="text-[10px] font-bold text-green-600 flex items-center gap-1">
+                <Check className="w-3 h-3 text-green-500" /> Đã nhập mã
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+            <input
+              type="text"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              className="w-full bg-[#f8f9fa] border border-neutral-200 rounded-3xl py-3.5 pl-11 pr-4 text-base font-semibold text-neutral-900 focus:ring-2 focus:ring-neutral-900 outline-none transition-all placeholder:text-neutral-300 uppercase tracking-wide"
+              placeholder="Nhập mã ưu đãi (Ví dụ: NHAPMOI20, FREESHIP...)"
+            />
+          </div>
+          
+          {/* Quick-click suggestion list */}
+          <div className="pt-1 select-none">
+            <p className="text-[10px] text-neutral-400 font-medium pl-1 mb-1.5">Gợi ý mã khuyến mãi dành cho bạn:</p>
+            <div className="flex flex-wrap gap-1.5 pl-1">
+              {[
+                { code: 'TIETKIEM10', desc: 'Ưu dãi tiết kiệm 10%' },
+                { code: 'DRIV20', desc: 'Độc quyền Driv 20%' },
+                { code: 'FINTRO50', desc: 'Quà tặng Fintro 50K' },
+                { code: 'FREESHIP', desc: 'Miễn phí giao dịch' }
+              ].map(promo => {
+                const isSelected = promoCode.trim().toUpperCase() === promo.code;
+                return (
+                  <button
+                    key={promo.code}
+                    type="button"
+                    onClick={() => setPromoCode(isSelected ? '' : promo.code)}
+                    className={`text-[9px] font-bold px-2.5 py-1 rounded-full border transition-all duration-200 cursor-pointer flex items-center gap-1 ${
+                      isSelected 
+                        ? 'bg-green-50 text-green-800 border-green-300 shadow-sm scale-105' 
+                        : 'bg-neutral-50 text-neutral-600 border-neutral-200 hover:bg-neutral-100 hover:border-neutral-300'
+                    }`}
+                    title={promo.desc}
+                  >
+                    {isSelected && <Check className="w-2.5 h-2.5 text-green-600" />}
+                    {promo.code}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

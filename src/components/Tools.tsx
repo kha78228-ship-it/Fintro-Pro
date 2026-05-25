@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart, LineChart, Users, ArrowRightLeft, AppWindow, Globe } from 'lucide-react';
+import { Calculator, Lightbulb, PieChart, ShieldCheck, Target, TrendingUp, Percent, Banknote, Heart, LineChart, Users, ArrowRightLeft, AppWindow, Globe, ClipboardList, Layers } from 'lucide-react';
 import { useCurrency } from '../lib/CurrencyContext';
 
 interface ToolsProps {
@@ -167,6 +167,48 @@ export default function Tools({ setCurrentView, appMode = 'finance' }: ToolsProp
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Google Workspace Hub */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="col-span-1 md:col-span-1 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-3xl p-6 flex items-center justify-between shadow-sm border border-indigo-200 text-neo-dark cursor-pointer hover:scale-[1.02] transition-transform"
+          onClick={() => setCurrentView && setCurrentView('google_workspace')}
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center shrink-0 border border-indigo-200">
+              <Layers className="w-7 h-7 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold font-display text-neutral-900 flex items-center gap-2">
+                Google Workspace Hub
+                <span className="text-[9px] uppercase tracking-widest font-extrabold text-indigo-600 bg-indigo-200/50 px-2 py-0.5 rounded-full border border-indigo-300">Premium</span>
+              </h3>
+              <p className="text-neutral-500 text-sm mt-1">Lịch Calendar, Soạn soạn thảo Docs & Ghi chú Keep.</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Sổ tay Google Tasks */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="col-span-1 md:col-span-1 bg-gradient-to-r from-blue-50 to-sky-50 rounded-3xl p-6 flex items-center justify-between shadow-sm border border-blue-200 text-neo-dark cursor-pointer hover:scale-[1.02] transition-transform"
+          onClick={() => setCurrentView && setCurrentView('google_tasks')}
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center shrink-0 border border-blue-200">
+              <ClipboardList className="w-7 h-7 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold font-display text-neutral-900 flex items-center gap-2">
+                Sổ tay Google Tasks
+                <span className="text-[9px] uppercase tracking-widest font-extrabold text-blue-600 bg-blue-200/50 px-2 py-0.5 rounded-full border border-blue-300">Google</span>
+              </h3>
+              <p className="text-neutral-500 text-sm mt-1">Ghi nhớ & quản lý công việc đồng bộ hóa đám mây.</p>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Báo cáo tài chính */}
         {appMode === 'finance' && (
           <motion.div 

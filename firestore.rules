@@ -49,14 +49,17 @@ service cloud.firestore {
     
     function isValidTransaction(data) {
       return data.keys().hasAll(['amount', 'type', 'status', 'category', 'description', 'date', 'userId'])
-        && data.keys().size() == 7
+        && data.keys().size() >= 7 && data.keys().size() <= 10
         && data.amount is number && data.amount >= 0
         && data.type in ['income', 'expense']
         && data.status in ['completed', 'pending', 'cancelled']
         && data.category is string && data.category.size() <= 100
         && data.description is string && data.description.size() <= 1000
         && data.date is string && data.date.size() <= 32
-        && data.userId == request.auth.uid;
+        && data.userId == request.auth.uid
+        && (!('promoCode' in data) || (data.promoCode is string && data.promoCode.size() <= 100))
+        && (!('isRecurring' in data) || data.isRecurring is bool)
+        && (!('recurringPeriod' in data) || data.recurringPeriod in ['daily', 'weekly', 'monthly', 'yearly', 'none']);
     }
 
     function isValidBudget(data) {

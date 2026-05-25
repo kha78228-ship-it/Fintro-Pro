@@ -2,7 +2,7 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from './firebase';
 
 // Cache the Google Meet Access Token in memory
-let cachedMeetAccessToken: string | null = null;
+let cachedMeetAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('__google_access_token') : null;
 let cachedGoogleUser: any = null;
 
 /**
@@ -24,6 +24,12 @@ export const connectGoogleMeet = async (): Promise<{ user: any; accessToken: str
     
     cachedMeetAccessToken = credential.accessToken;
     cachedGoogleUser = result.user;
+    
+    try {
+      localStorage.setItem('__google_access_token', cachedMeetAccessToken);
+    } catch (e) {
+      console.error(e);
+    }
     
     return { user: result.user, accessToken: cachedMeetAccessToken };
   } catch (error) {
@@ -53,6 +59,11 @@ export const getGoogleMeetToken = (): string | null => {
 export const setGoogleMeetToken = (token: string | null, googleUser?: any) => {
   cachedMeetAccessToken = token;
   if (googleUser) cachedGoogleUser = googleUser;
+  if (token) {
+    try {
+      localStorage.setItem('__google_access_token', token);
+    } catch (e) {}
+  }
 };
 
 export interface GoogleMeetSpace {

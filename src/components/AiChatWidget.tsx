@@ -39,6 +39,57 @@ interface AiChatWidgetProps {
 
 type ChatMode = 'finance' | 'love' | 'entertainment';
 
+const MODE_THEMES = {
+  finance: {
+    primary: 'from-emerald-600 to-teal-500',
+    primaryColor: '#059669',
+    accentClass: 'bg-emerald-500 text-white',
+    inactiveClass: 'bg-white/25 text-white/90 hover:bg-white/35',
+    buttonGrad: 'from-emerald-500 to-teal-400 shadow-emerald-500/30',
+    userBubble: 'bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/10 rounded-2xl rounded-tr-none border border-emerald-500/20',
+    avatarBg: 'bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600',
+    inputRing: 'focus:ring-emerald-500',
+    loaderBg: 'bg-emerald-100 text-emerald-600',
+    loaderDot: 'bg-emerald-500',
+    headerGrad: 'from-emerald-700 via-emerald-600 to-teal-600',
+    chatTitle: 'Fintro AI • Tài Chính',
+    placeholder: 'Hỏi về nợ nần, chi tiêu, tiết kiệm...',
+    sendBtn: 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:shadow-lg hover:shadow-emerald-500/20 shadow-md',
+  },
+  love: {
+    primary: 'from-rose-500 to-orange-400',
+    primaryColor: '#f43f5e',
+    accentClass: 'bg-rose-500 text-white',
+    inactiveClass: 'bg-white/25 text-white/90 hover:bg-white/35',
+    buttonGrad: 'from-rose-500 to-orange-400 shadow-rose-500/30',
+    userBubble: 'bg-gradient-to-br from-rose-500 via-rose-500 to-orange-400 text-white shadow-md shadow-rose-500/10 rounded-2xl rounded-tr-none border border-rose-500/20',
+    avatarBg: 'bg-rose-50 hover:bg-rose-100 border border-rose-250 text-rose-600',
+    inputRing: 'focus:ring-rose-500',
+    loaderBg: 'bg-rose-100 text-rose-600',
+    loaderDot: 'bg-rose-500',
+    headerGrad: 'from-rose-600 via-rose-500 to-orange-500',
+    chatTitle: 'Valentine AI • Tình Yêu',
+    placeholder: 'Tâm sự chuyện tình cảm hoặc hỏi ý kiến...',
+    sendBtn: 'bg-gradient-to-r from-rose-500 to-orange-400 hover:shadow-lg hover:shadow-rose-500/20 shadow-md',
+  },
+  entertainment: {
+    primary: 'from-indigo-600 to-purple-500',
+    primaryColor: '#4f46e5',
+    accentClass: 'bg-indigo-600 text-white',
+    inactiveClass: 'bg-white/25 text-white/90 hover:bg-white/35',
+    buttonGrad: 'from-indigo-600 to-purple-500 shadow-indigo-600/30',
+    userBubble: 'bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-500 text-white shadow-md shadow-indigo-500/10 rounded-2xl rounded-tr-none border border-indigo-500/20',
+    avatarBg: 'bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-600',
+    inputRing: 'focus:ring-indigo-500',
+    loaderBg: 'bg-indigo-100 text-indigo-600',
+    loaderDot: 'bg-indigo-500',
+    headerGrad: 'from-indigo-700 via-indigo-600 to-purple-600',
+    chatTitle: 'Joy AI • Giải Trí',
+    placeholder: 'Kể chuyện vui, chơi game, nghe nhạc...',
+    sendBtn: 'bg-gradient-to-r from-indigo-600 to-purple-500 hover:shadow-lg hover:shadow-indigo-500/20 shadow-md',
+  }
+};
+
 const ChatMessageItem = React.memo(({ 
   msg, 
   activeMode, 
@@ -56,39 +107,41 @@ const ChatMessageItem = React.memo(({
     return <IconObj className={className} />;
   };
 
+  const bubbleTheme = MODE_THEMES[activeMode];
+
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      initial={{ opacity: 0, y: 15, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 25 }}
-      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+      transition={{ type: "spring", stiffness: 350, damping: 28 }}
+      className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
       {msg.role === 'assistant' && (
-         <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 shrink-0 self-end mb-1 overflow-hidden transition-colors ${activeMode === 'love' ? 'bg-orange-100' : activeMode === 'entertainment' ? 'bg-purple-100' : 'bg-neutral-200'}`}>
-            <AvatarIcon className={`w-5 h-5 object-cover ${activeMode === 'love' ? 'text-orange-600' : activeMode === 'entertainment' ? 'text-purple-600' : 'text-neutral-600'}`} />
+         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 self-end mb-1 overflow-hidden transition-all ${bubbleTheme.avatarBg}`}>
+            <AvatarIcon className="w-4.5 h-4.5 object-cover" />
          </div>
       )}
-      <div className="flex flex-col gap-1">
+      <div className={`flex flex-col gap-1 max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
         <div 
-          className={`max-w-[80%] p-3.5 rounded-3xl text-[13px] leading-relaxed ${
+          className={`p-3.5 text-[13px] leading-relaxed shadow-sm transition-all duration-300 ${
             msg.role === 'user' 
-              ? 'bg-neutral-900 text-white shadow-md' 
-              : 'bg-white text-neutral-800 shadow-sm border border-neutral-100'
+              ? bubbleTheme.userBubble
+              : 'bg-white text-neutral-800 border border-neutral-100/80 rounded-2xl rounded-tl-none shadow-[0_2px_8px_rgba(3,9,20,0.02)]'
           }`}
         >
           {msg.role === 'user' ? (
-            msg.content
+            <div className="whitespace-pre-wrap">{msg.content}</div>
           ) : (
-            <div className="markdown-body">
+            <div className="markdown-body text-[13px]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {msg.content}
               </ReactMarkdown>
             </div>
           )}
         </div>
-        <div className={`text-[10px] text-neutral-400 flex items-center gap-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start ml-1'}`}>
-          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          {msg.status && (
+        <div className={`text-[10px] text-neutral-400 px-1 flex items-center gap-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          {msg.role === 'user' && msg.status && (
             <span className="capitalize text-[9px] opacity-70"> • {msg.status}</span>
           )}
         </div>
@@ -256,17 +309,27 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
     scrollToBottom();
   }, [currentMessages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (overrideText?: string | React.FormEvent) => {
+    let textToSend = '';
+    if (typeof overrideText === 'string') {
+      textToSend = overrideText.trim();
+    } else {
+      textToSend = input.trim();
+    }
 
-    const isAiCall = input.trim().startsWith('@');
-    const cleanInput = isAiCall ? input.trim().substring(1).trim() : input.trim();
+    if (!textToSend || isLoading) return;
+
+    const isAiCall = textToSend.startsWith('@');
+    const cleanInput = isAiCall ? textToSend.substring(1).trim() : textToSend;
     
     if (cleanInput === '') return;
 
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: input, timestamp: Date.now(), status: 'sent' };
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: textToSend, timestamp: Date.now(), status: 'sent' };
     setMessagesForCurrentMode(prev => [...prev, userMessage]);
-    setInput('');
+    
+    if (typeof overrideText !== 'string') {
+      setInput('');
+    }
     setIsLoading(true);
 
     // Simulate delivered status
@@ -361,14 +424,18 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
     }
   };
 
+  const activeTheme = MODE_THEMES[activeMode];
+
   return (
     <>
-      {/* Chat Bubble Button */}
+      {/* Chat Bubble Button with Glowing Ambient Wave */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 right-6 md:bottom-12 md:right-12 z-40 w-16 h-16 bg-neutral-600 text-white rounded-full flex items-center justify-center shadow-2xl hover:bg-neutral-700 transition-all sm:active:scale-95 group"
+        className={`fixed bottom-24 right-6 md:bottom-12 md:right-12 z-40 w-16 h-16 rounded-full flex items-center justify-center shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 sm:active:scale-95 group text-white bg-gradient-to-tr ${activeTheme.buttonGrad} border border-white/10`}
       >
-        <AvatarIcon className="w-8 h-8 group-hover:scale-110 transition-transform duration-300" />
+        <span className="absolute inset-0 rounded-full bg-current opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none" />
+        <span className="absolute -inset-1 rounded-full bg-current opacity-10 animate-ping pointer-events-none group-hover:scale-110 transition-transform duration-500" />
+        <AvatarIcon className="w-8 h-8 group-hover:scale-110 transition-transform duration-300 relative z-10" />
       </button>
 
       {/* Chat Panel */}
@@ -378,38 +445,38 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
             initial={{ opacity: 0, y: 50, scale: 0.9, x: 20 }}
             animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
             exit={{ opacity: 0, y: 50, scale: 0.9, x: 20 }}
-            className="fixed bottom-24 right-6 md:bottom-32 md:right-12 z-50 w-[calc(100vw-3rem)] md:w-96 bg-white rounded-3xl shadow-2xl border border-neutral-100 overflow-hidden flex flex-col"
-            style={{ height: '550px', maxHeight: '80vh' }}
+            className="fixed bottom-24 right-6 md:bottom-32 md:right-12 z-50 w-[calc(100vw-3rem)] md:w-[400px] bg-[#fcfdfe] rounded-3xl shadow-2xl border border-neutral-150/40 overflow-hidden flex flex-col"
+            style={{ height: '600px', maxHeight: '80vh' }}
           >
             {/* Header */}
-            <div className="bg-neutral-600 p-4 text-white flex justify-between items-center relative overflow-hidden shrink-0">
-              <div className="absolute top-0 right-0 p-4 opacity-10">
+            <div className={`bg-gradient-to-r ${activeTheme.headerGrad} p-4 text-white flex justify-between items-center relative overflow-hidden shrink-0 shadow-sm`}>
+              <div className="absolute top-0 right-0 p-4 opacity-15">
                 <BrainCircuit className="w-24 h-24" />
               </div>
               <div className="flex items-center gap-3 relative z-10">
-                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner">
+                <div className="w-10 h-10 bg-white/15 rounded-full flex items-center justify-center backdrop-blur-md shadow-inner border border-white/10">
                   <AvatarIcon className="w-5 h-5 text-neutral-50" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base leading-tight">Fintro AI</h3>
-                  <div className="flex gap-1 mt-1">
+                  <h3 className="font-bold text-sm leading-tight font-display">{activeTheme.chatTitle}</h3>
+                  <div className="flex gap-1.5 mt-1.5">
                     <button 
                       onClick={() => setActiveMode('finance')} 
-                      className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors ${activeMode === 'finance' ? 'bg-white text-neutral-800' : 'bg-white/20 text-white/80 hover:bg-white/30'}`}
+                      className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all duration-250 cursor-pointer ${activeMode === 'finance' ? 'bg-white text-emerald-800 shadow-sm font-extrabold' : 'bg-white/15 text-white/80 hover:bg-white/20'}`}
                     >
-                      <Wallet className="w-2.5 h-2.5" /> Finance
+                      <Wallet className="w-2.5 h-2.5" /> Tài chính
                     </button>
                     <button 
                       onClick={() => setActiveMode('love')} 
-                      className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors ${activeMode === 'love' ? 'bg-orange-500 text-white' : 'bg-white/20 text-white/80 hover:bg-white/30'}`}
+                      className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all duration-250 cursor-pointer ${activeMode === 'love' ? 'bg-white text-rose-600 shadow-sm font-extrabold' : 'bg-white/15 text-white/80 hover:bg-white/20'}`}
                     >
-                      <Heart className="w-2.5 h-2.5" /> Love
+                      <Heart className="w-2.5 h-2.5" /> Tình yêu
                     </button>
                     <button 
                       onClick={() => setActiveMode('entertainment')} 
-                      className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors ${activeMode === 'entertainment' ? 'bg-purple-500 text-white' : 'bg-white/20 text-white/80 hover:bg-white/30'}`}
+                      className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all duration-250 cursor-pointer ${activeMode === 'entertainment' ? 'bg-white text-indigo-700 shadow-sm font-extrabold' : 'bg-white/15 text-white/80 hover:bg-white/20'}`}
                     >
-                      <Sparkles className="w-2.5 h-2.5" /> Fun
+                      <Sparkles className="w-2.5 h-2.5" /> Thư giãn
                     </button>
                   </div>
                 </div>
@@ -417,21 +484,21 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
               <div className="flex items-center gap-1 relative z-10">
                 <button 
                   onClick={() => setShowSettings(!showSettings)}
-                  className={`p-1.5 hover:bg-white/20 rounded-full transition-all ${showSettings ? 'bg-white/30' : 'bg-white/10'}`}
+                  className={`p-1.5 hover:bg-white/25 rounded-lg transition-all cursor-pointer ${showSettings ? 'bg-white/30' : 'bg-white/10'}`}
                   title="Cài đặt Avatar"
                 >
                   <Palette className="w-4 h-4 text-neutral-50" />
                 </button>
                 <button 
                   onClick={clearHistory}
-                  className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                  className="p-1.5 bg-white/10 hover:bg-white/25 rounded-lg transition-all cursor-pointer"
                   title="Xóa lịch sử hiện tại"
                 >
                   <Trash2 className="w-4 h-4 text-neutral-50" />
                 </button>
                 <button 
                   onClick={() => { setIsOpen(false); setShowSettings(false); }}
-                  className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full transition-all ml-1"
+                  className="p-1.5 bg-white/10 hover:bg-white/25 rounded-lg transition-all cursor-pointer ml-1"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -496,15 +563,21 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
                    <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
                      {activeMode === 'finance' && (
                        <>
-                         <button onClick={() => setInput("Phân tích nợ của mình")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Phân tích nợ</button>
-                         <button onClick={() => setInput("Dịch vụ nào sắp hết hạn?")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Gia hạn dịch vụ</button>
-                         <button onClick={() => setInput("Gợi ý tiết kiệm tháng này")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-neutral-50 shrink-0 shadow-sm">Mẹo tiết kiệm</button>
+                         <button type="button" onClick={() => handleSend("Phân tích nợ của mình")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 shrink-0 shadow-sm transition-all cursor-pointer">💸 Phân tích nợ</button>
+                         <button type="button" onClick={() => handleSend("Dịch vụ nào sắp hết hạn?")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 shrink-0 shadow-sm transition-all cursor-pointer">🔔 Gia hạn dịch vụ</button>
+                         <button type="button" onClick={() => handleSend("Gợi ý tiết kiệm tháng này")} className="px-3 py-1.5 bg-white border border-neutral-200 rounded-2xl text-[11px] font-bold text-neutral-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 shrink-0 shadow-sm transition-all cursor-pointer">💡 Mẹo tiết kiệm</button>
                        </>
                      )}
                      {activeMode === 'love' && (
                        <>
-                         <button onClick={() => setInput("Gợi ý quà tặng lãng mạn")} className="px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-2xl text-[11px] font-bold text-orange-600 hover:bg-orange-100 shrink-0 shadow-sm">Gợi ý quà</button>
-                         <button onClick={() => setInput("Làm sao để làm hòa?")} className="px-3 py-1.5 bg-orange-50 border border-orange-100 rounded-2xl text-[11px] font-bold text-orange-600 hover:bg-orange-100 shrink-0 shadow-sm">Làm hòa</button>
+                         <button type="button" onClick={() => handleSend("Gợi ý quà tặng lãng mạn")} className="px-3 py-1.5 bg-rose-50 border border-rose-100 rounded-2xl text-[11px] font-bold text-rose-600 hover:bg-rose-100 shrink-0 shadow-sm transition-all cursor-pointer">🎁 Gợi ý quà</button>
+                         <button type="button" onClick={() => handleSend("Làm sao để làm hòa?")} className="px-3 py-1.5 bg-rose-50 border border-rose-100 rounded-2xl text-[11px] font-bold text-rose-600 hover:bg-rose-100 shrink-0 shadow-sm transition-all cursor-pointer">❤️ Làm hòa</button>
+                       </>
+                     )}
+                     {activeMode === 'entertainment' && (
+                       <>
+                         <button type="button" onClick={() => handleSend("Kể cho mình nghe một câu chuyện cười")} className="px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-[11px] font-bold text-indigo-600 hover:bg-indigo-100 shrink-0 shadow-sm transition-all cursor-pointer">😄 Kể chuyện cười</button>
+                         <button type="button" onClick={() => handleSend("Gợi ý trò chơi hẹn hò vui nhộn")} className="px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-[11px] font-bold text-indigo-600 hover:bg-indigo-100 shrink-0 shadow-sm transition-all cursor-pointer">🎮 Trò chơi</button>
                        </>
                      )}
                    </div>
@@ -523,16 +596,16 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="flex justify-start"
+                    className="flex justify-start gap-2.5 items-end"
                   >
-                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-2 shrink-0 self-end mb-1 overflow-hidden ${activeMode === 'love' ? 'bg-orange-100' : activeMode === 'entertainment' ? 'bg-purple-100' : 'bg-neutral-200'}`}>
-                        <AvatarIcon className={`w-5 h-5 animate-pulse object-cover ${activeMode === 'love' ? 'text-orange-600' : activeMode === 'entertainment' ? 'text-purple-600' : 'text-neutral-600'}`} />
+                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 self-end mb-1 overflow-hidden transition-all ${activeTheme.avatarBg}`}>
+                        <AvatarIcon className="w-4.5 h-4.5 object-cover text-current" />
                      </div>
-                     <div className="max-w-[80%] px-5 py-4 bg-white border border-neutral-100 rounded-3xl shadow-sm flex items-center h-[52px]">
+                     <div className="max-w-[80%] px-5 py-3.5 bg-white border border-neutral-100/80 rounded-2xl rounded-tl-none shadow-[0_2px_8px_rgba(3,9,20,0.02)] flex items-center h-[42px]">
                        <div className="flex gap-1.5 items-center justify-center">
-                         <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className={`w-1.5 h-1.5 rounded-full ${activeMode === 'love' ? 'bg-orange-400' : activeMode === 'entertainment' ? 'bg-purple-400' : 'bg-neutral-400'}`} />
-                         <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.15 }} className={`w-1.5 h-1.5 rounded-full ${activeMode === 'love' ? 'bg-orange-400' : activeMode === 'entertainment' ? 'bg-purple-400' : 'bg-neutral-400'}`} />
-                         <motion.div animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.3 }} className={`w-1.5 h-1.5 rounded-full ${activeMode === 'love' ? 'bg-orange-400' : activeMode === 'entertainment' ? 'bg-purple-400' : 'bg-neutral-400'}`} />
+                         <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className={`w-1.5 h-1.5 rounded-full ${activeTheme.loaderDot}`} />
+                         <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.15 }} className={`w-1.5 h-1.5 rounded-full ${activeTheme.loaderDot}`} />
+                         <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.3 }} className={`w-1.5 h-1.5 rounded-full ${activeTheme.loaderDot}`} />
                        </div>
                      </div>
                   </motion.div>
@@ -541,23 +614,28 @@ export default function AiChatWidget({ transactions = [], appMode = 'finance', u
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Form */}
+            {/* Input Form Section */}
             <div className="p-4 bg-white border-t border-neutral-100 shrink-0">
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-                className="relative"
+                className="relative flex items-center gap-2"
               >
-                <input 
-                  type="text" 
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={`Trò chuyện về ${activeMode === 'finance' ? 'tài chính' : activeMode === 'love' ? 'tình yêu' : 'giải trí'}...`}
-                  className="w-full bg-neutral-50 border-none rounded-3xl py-3.5 pl-5 pr-14 text-[13px] focus:ring-2 focus:ring-neutral-100 transition-all text-neutral-900 placeholder:text-neutral-400 font-medium"
-                />
+                <div className="relative flex-1">
+                  <input 
+                    type="text" 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={activeTheme.placeholder}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-2xl py-3 pl-4 pr-11 text-[13px] text-neutral-900 placeholder:text-neutral-400 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-200 focus:border-neutral-300 transition-all duration-200"
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center text-neutral-300 pointer-events-none">
+                    <Sparkles className="w-4 h-4 text-neutral-400 opacity-60" />
+                  </div>
+                </div>
                 <button 
                   type="submit"
                   disabled={!input.trim() || isLoading}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white rounded-full hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center ${activeMode === 'love' ? 'bg-orange-500' : activeMode === 'entertainment' ? 'bg-purple-500' : 'bg-neutral-800'}`}
+                  className={`w-11 h-11 text-white rounded-2xl hover:opacity-90 disabled:opacity-40 transition-all flex items-center justify-center shrink-0 cursor-pointer ${activeTheme.sendBtn}`}
                 >
                   <Send className="w-4 h-4 ml-0.5" />
                 </button>

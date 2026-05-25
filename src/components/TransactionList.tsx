@@ -43,16 +43,16 @@ const TransactionItem = memo(({
       whileHover={reducedMotion ? {} : { scale: 1.005 }}
       whileTap={reducedMotion ? {} : { scale: 0.99 }}
       transition={reducedMotion ? { duration: 0.2 } : { delay: idx * 0.03 }}
-      className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-neutral-50/80 rounded-3xl transition-all duration-300 relative bg-white border border-neutral-100 hover:border-neutral-200/80 shadow-sm hover:shadow active:scale-100 cursor-pointer mb-2"
+      className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-3xl transition-all duration-300 relative bg-neo-light border border-neo-dark/15 hover:border-neo-orange/40 hover:bg-neo-light/95 shadow-sm hover:shadow active:scale-100 cursor-pointer mb-2"
     >
       <div className="flex items-start sm:items-center gap-3">
         <div className={`w-11 h-11 rounded-full flex flex-col items-center justify-center transition-colors shrink-0 ${
-          t.type === TransactionType.INCOME ? 'bg-neutral-50 text-neutral-600 border border-neutral-100' : 'bg-orange-50 text-orange-500 border border-orange-100/50'
+          t.type === TransactionType.INCOME ? 'bg-neo-light/80 text-neo-dark/70 border border-neo-dark/10' : 'bg-orange-50 text-orange-505 border border-orange-100/50'
         }`}>
           <IconComponent className="w-5 h-5" />
         </div>
         <div className="flex flex-col min-w-0">
-          <div className="text-[15px] font-semibold text-neutral-900 leading-tight mb-0.5 truncate">{t.description || categoryObj?.name}</div>
+          <div className="text-[15px] font-semibold text-neo-dark leading-tight mb-0.5 truncate">{t.description || categoryObj?.name}</div>
           <div className="text-[11px] text-neutral-400 flex flex-wrap items-center gap-1.5 font-medium">
             <span className="font-mono tracking-tight text-neutral-500">{format(parseISO(t.date), 'HH:mm')}</span>
             <span className="w-1 h-1 rounded-full bg-neutral-300 shrink-0"></span>
@@ -67,6 +67,15 @@ const TransactionItem = memo(({
                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-neutral-50 text-neutral-600 border border-neutral-100">
                    <LucideIcons.Repeat className="w-2.5 h-2.5" />
                    {t.recurringPeriod === 'daily' ? 'Hàng ngày' : t.recurringPeriod === 'weekly' ? 'Hàng tuần' : t.recurringPeriod === 'monthly' ? 'Hàng tháng' : 'Hàng năm'}
+                 </span>
+               </>
+            )}
+            {t.promoCode && (
+               <>
+                 <span className="w-1 h-1 rounded-full bg-neutral-300 shrink-0"></span>
+                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 font-bold uppercase tracking-wider text-[8px] sm:text-[9px]">
+                   <LucideIcons.Tag className="w-2.5 h-2.5 text-purple-500" />
+                   {t.promoCode}
                  </span>
                </>
             )}
@@ -281,19 +290,19 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
       )}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <div>
-           <h3 className="text-xl font-semibold text-neutral-900 tracking-tight">Lịch sử giao dịch</h3>
-           <p className="text-sm text-neutral-400 mt-1">Biến động thu chi theo ngày</p>
+           <h3 className="text-xl font-semibold text-neo-dark tracking-tight">Lịch sử giao dịch</h3>
+           <p className="text-sm text-neo-dark/60 mt-1">Biến động thu chi theo ngày</p>
         </div>
         {!hideHeaderActions && (
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
             <div className="relative w-full sm:w-auto">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-neo-dark/40 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
                 placeholder="Tìm kiếm giao dịch..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-neutral-50 border border-neutral-200 rounded-3xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all w-full sm:w-64"
+                className="pl-9 pr-4 py-2 bg-neo-light border border-neo-dark/20 text-neo-dark rounded-3xl text-sm focus:outline-none focus:ring-2 focus:ring-neo-orange/20 focus:border-neo-orange transition-all w-full sm:w-64"
               />
             </div>
             <button

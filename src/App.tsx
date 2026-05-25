@@ -43,6 +43,8 @@ const SharedFund = lazy(() => import("./components/SharedFund"));
 const Reports = lazy(() => import("./components/Reports"));
 const Tools = lazy(() => import("./components/Tools"));
 const WebAppWrapper = lazy(() => import("./components/WebAppWrapper"));
+const GoogleTasks = lazy(() => import("./components/GoogleTasks"));
+const GoogleWorkspace = lazy(() => import("./components/GoogleWorkspace"));
 const SettingsView = lazy(() => import("./components/SettingsView"));
 const AiChatWidget = lazy(() => import("./components/AiChatWidget"));
 const FriendsView = lazy(() => import("./components/FriendsView"));
@@ -55,11 +57,13 @@ const VintageBackground = lazy(() => import("./components/VintageBackground").th
 const GoogleMaterialBackground = lazy(() => import("./components/GoogleMaterialBackground").then(m => ({ default: m.GoogleMaterialBackground })));
 const VietnamLoadingScreen = lazy(() => import("./components/VietnamLoadingScreen").then(m => ({ default: m.VietnamLoadingScreen })));
 const VintageLoadingScreen = lazy(() => import("./components/VintageLoadingScreen").then(m => ({ default: m.VintageLoadingScreen })));
+const GoogleMaterialLoadingScreen = lazy(() => import("./components/GoogleMaterialLoadingScreen"));
 const PinkCuteBackground = lazy(() => import("./components/PinkCuteBackground").then(m => ({ default: m.PinkCuteBackground })));
 const PinkCuteLoadingScreen = lazy(() => import("./components/PinkCuteLoadingScreen").then(m => ({ default: m.PinkCuteLoadingScreen })));
 const DongSonDrumHUD = lazy(() => import("./components/DongSonDrumHUD").then(m => ({ default: m.DongSonDrumHUD })));
 const VietnamLoginForm = lazy(() => import("./components/VietnamLoginForm").then(m => ({ default: m.VietnamLoginForm })));
 const VintageLoginForm = lazy(() => import("./components/VintageLoginForm").then(m => ({ default: m.VintageLoginForm })));
+const GoogleMaterialLoginForm = lazy(() => import("./components/GoogleMaterialLoginForm").then(m => ({ default: m.GoogleMaterialLoginForm })));
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import PwaInstallBanner from "./components/PwaInstallBanner";
 
@@ -97,6 +101,7 @@ import {
   ArrowRight,
   Loader2,
   Image as ImageIcon,
+  ClipboardList,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -262,7 +267,9 @@ type View =
   | "settings"
   | "social_feed"
   | "notifications"
-  | "friends";
+  | "friends"
+  | "google_tasks"
+  | "google_workspace";
 
 export default function App() {
   const {
@@ -289,7 +296,7 @@ export default function App() {
 
   const setCurrentView = useCallback((view: View) => {
     _setCurrentView(view);
-    const financeViews: View[] = ["dashboard", "history", "planning", "shared_fund", "reports", "tools", "calendar"];
+    const financeViews: View[] = ["dashboard", "history", "planning", "shared_fund", "reports", "tools", "calendar", "google_tasks", "google_workspace"];
     const loveViews: View[] = ["love_home", "love_memory", "exercises", "discovery", "dates", "forget_me_nots", "cycle", "photo_album"];
     const entertainmentViews: View[] = ["social_feed", "couple_games"];
     if (financeViews.includes(view)) {
@@ -644,6 +651,16 @@ export default function App() {
 
       if (u) {
         setIsCheckingProfile(true);
+        // Auto-load Google Integration tokens if cached
+        try {
+          const cachedToken = localStorage.getItem("__google_access_token");
+          if (cachedToken) {
+            const { initializeGoogleTokens } = await import("./lib/firebase");
+            await initializeGoogleTokens(cachedToken, u);
+          }
+        } catch (e) {
+          console.error("Error auto-initializing Google integration tokens", e);
+        }
         try {
           const profileRef = doc(db, "users", u.uid);
           const publicProfileRef = doc(db, "publicProfiles", u.uid);
@@ -758,6 +775,13 @@ export default function App() {
           setLoading(false);
         }
       } else {
+        // Clear Google access and service tokens on logout or session end
+        try {
+          const { clearGoogleTokens } = await import("./lib/firebase");
+          await clearGoogleTokens();
+        } catch (e) {
+          console.error("Error clearing Google integration tokens on logout", e);
+        }
         if (user) {
           const profileRef = doc(db, "users", user.uid);
           const publicProfileRef = doc(db, "publicProfiles", user.uid);
@@ -778,6 +802,21 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, [user]);
+
+  // Trigger reminders and automatic notifications scan on startup
+  useEffect(() => {
+    if (!user) return;
+    const triggerScans = async () => {
+      try {
+        const { generateRemindersAndNotifications } = await import('./lib/autoNotificationBuilder');
+        await generateRemindersAndNotifications(user.uid);
+      } catch (e) {
+        console.error('Error running automatic reminders scan on app boot', e);
+      }
+    };
+    const timer = setTimeout(triggerScans, 5000);
+    return () => clearTimeout(timer);
   }, [user]);
 
   // Presence management effect
@@ -1177,6 +1216,8 @@ export default function App() {
           <PinkCuteLoadingScreen appMode={appMode} />
         ) : appTheme === 'vintage' ? (
           <VintageLoadingScreen appMode={appMode} />
+        ) : appTheme === 'google_material' ? (
+          <GoogleMaterialLoadingScreen />
         ) : (
           <VietnamLoadingScreen appMode={appMode} graphicsQuality={graphicsQuality} />
         )}
@@ -1320,7 +1361,7 @@ export default function App() {
               onClick={() => handleUpdateTheme(appTheme === "vietnam" ? "vintage" : appTheme === "vintage" ? "pink_cute" : appTheme === "pink_cute" ? "google_material" : "vietnam")}
               className="px-4 py-2 border border-neo-dark text-[10px] uppercase font-bold tracking-widest hover:bg-neo-dark hover:text-neo-light active:scale-95 transition-all hidden sm:block"
             >
-              Giao Diện: {appTheme === "vietnam" ? "Việt Nam 2026" : appTheme === 'pink_cute' ? "Hường Dễ Thương" : appTheme === 'google_material' ? "Google Material" : "Neo-Brutalism"}
+              Giao Diện: {appTheme === "vietnam" ? "Việt Nam 2026" : appTheme === 'pink_cute' ? "Hường Dễ Thương" : appTheme === 'google_material' ? "Driv" : "Neo-Brutalism"}
             </button>
             <button
               onClick={() => {
@@ -1448,6 +1489,25 @@ export default function App() {
                           handleConnectSpace={handleConnectSpace}
                           inviteError={inviteError}
                           graphicsQuality={graphicsQuality}
+                          onGoogleSignIn={async () => {
+                            setIsLoggingIn(true);
+                            try {
+                              const { signInWithGoogle } = await import("./lib/firebase");
+                              await signInWithGoogle();
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setIsLoggingIn(false);
+                            }
+                          }}
+                        />
+                      ) : appTheme === "google_material" ? (
+                        <GoogleMaterialLoginForm
+                          isLoggingIn={isLoggingIn}
+                          inviteCode={inviteCode}
+                          setInviteCode={setInviteCode}
+                          handleConnectSpace={handleConnectSpace}
+                          inviteError={inviteError}
                           onGoogleSignIn={async () => {
                             setIsLoggingIn(true);
                             try {
@@ -1698,6 +1758,7 @@ export default function App() {
               onDeleteTransaction={handleDeleteTransaction}
               setCurrentView={setCurrentView}
               appTheme={appTheme}
+              user={user}
             />
           </motion.div>
         );
@@ -1744,6 +1805,22 @@ export default function App() {
         return (
           <motion.div key="tools" {...motionProps}>
             <Tools setCurrentView={setCurrentView} appMode={appMode} />
+          </motion.div>
+        );
+      case "google_tasks":
+        return (
+          <motion.div key="google_tasks" {...motionProps}>
+            <Suspense fallback={<div className="h-40 flex justify-center items-center">Đang tải...</div>}>
+              <GoogleWorkspace user={user} appTheme={appTheme} initialTab="tasks" />
+            </Suspense>
+          </motion.div>
+        );
+      case "google_workspace":
+        return (
+          <motion.div key="google_workspace" {...motionProps}>
+            <Suspense fallback={<div className="h-40 flex justify-center items-center">Đang tải biểu mẫu...</div>}>
+              <GoogleWorkspace user={user} appTheme={appTheme} initialTab="dashboard" />
+            </Suspense>
           </motion.div>
         );
       case "web_app_wrapper":
@@ -2235,6 +2312,22 @@ export default function App() {
                 icon={<Wrench className="w-5 h-5 sm:w-6 sm:h-6" />}
                 label="Công cụ"
                 color="text-purple-500"
+                layout="vertical"
+              />
+              <NavButton
+                active={currentView === "google_tasks"}
+                onClick={() => setCurrentView("google_tasks")}
+                icon={<ClipboardList className="w-5 h-5 sm:w-6 sm:h-6" />}
+                label="Nhiệm vụ"
+                color="text-blue-500"
+                layout="vertical"
+              />
+              <NavButton
+                active={currentView === "google_workspace"}
+                onClick={() => setCurrentView("google_workspace")}
+                icon={<Layers className="w-5 h-5 sm:w-6 sm:h-6" />}
+                label="Workspace"
+                color="text-indigo-500"
                 layout="vertical"
               />
               <NavButton

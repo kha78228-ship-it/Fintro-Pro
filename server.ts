@@ -209,19 +209,28 @@ async function startServer() {
         events = fundId ? (data.events || []) : (data.calendarEvents || []);
       }
 
-      // Generate ICS Content
-      let icsContent = "BEGIN:VCALENDAR\n" +
-                       "VERSION:2.0\n" +
-                       "PRODID:-//Fintro Pro//Shared Calendar//EN\n" +
-                       "CALSCALE:GREGORIAN\n" +
-                       "METHOD:PUBLISH\n" +
-                       "X-WR-CALNAME:Lich Gia Dinh - Fintro AI\n" +
-                       "X-WR-TIMEZONE:Asia/Ho_Chi_Minh\n";
+      // Generate highly polished, RFC 5545 compliant ICS Content using CRLF (\r\n)
+      // Custom VTIMEZONE block guarantees accurate representation across Google Calendar, macOS Calendar, and Outlook Webcal.
+      let icsContent = "BEGIN:VCALENDAR\r\n" +
+                       "VERSION:2.0\r\n" +
+                       "PRODID:-//Fintro AI Pro//Couple Dating Calendar//VI\r\n" +
+                       "CALSCALE:GREGORIAN\r\n" +
+                       "METHOD:PUBLISH\r\n" +
+                       `X-WR-CALNAME:${fundId ? "Lịch Hẹn Hò Cặp Đôi ❤️" : "Lịch Cá Nhân Fintro AI ✨"}\r\n` +
+                       "X-WR-TIMEZONE:Asia/Ho_Chi_Minh\r\n" +
+                       "BEGIN:VTIMEZONE\r\n" +
+                       "TZID:Asia/Ho_Chi_Minh\r\n" +
+                       "X-LIC-LOCATION:Asia/Ho_Chi_Minh\r\n" +
+                       "BEGIN:STANDARD\r\n" +
+                       "TZOFFSETFROM:+0700\r\n" +
+                       "TZOFFSETTO:+0700\r\n" +
+                       "TZNAME:+07\r\n" +
+                       "DTSTART:19700101T000000\r\n" +
+                       "END:STANDARD\r\n" +
+                       "END:VTIMEZONE\r\n";
 
       events.forEach((e: any) => {
         const id = e.id || Math.random().toString(36).substring(2);
-        const title = (e.title || "Su kien gia dinh").replace(/[\r\n]/g, " ");
-        const type = e.type || "other";
         
         let dateStr = e.date; // e.g. "2026-05-20"
         if (!dateStr || typeof dateStr !== "string" || !dateStr.includes("-")) return;
@@ -236,29 +245,64 @@ async function startServer() {
         const paddedHours = (hours || "00").padStart(2, '0');
         const paddedMins = (mins || "00").padStart(2, '0');
 
+        // Formatted timestamp strings
         const startStr = `${year}${month}${day}T${paddedHours}${paddedMins}00`;
         
-        let endHours = (parseInt(paddedHours, 10) + 1);
-        if (endHours >= 24) {
-          endHours = 23;
-        }
+        let endHours = (parseInt(paddedHours, 10) + 2); // default 2 hours duration for lovely dates!
+        if (endHours >= 24) endHours = 23;
         const paddedEndHours = endHours.toString().padStart(2, '0');
         const endStr = `${year}${month}${day}T${paddedEndHours}${paddedMins}00`;
 
-        icsContent += `BEGIN:VEVENT\n` +
-                      `UID:${id}@fintro.pro\n` +
-                      `DTSTAMP:${year}${month}${day}T000000Z\n` +
-                      `DTSTART:${startStr}\n` +
-                      `DTEND:${endStr}\n` +
-                      `SUMMARY:${title}\n` +
-                      `DESCRIPTION:Loai su kien: ${type}\n` +
-                      `END:VEVENT\n`;
+        // Thematic Emojis and Beautiful Titles
+        const rawTitle = e.title || "Lên lịch hẹn hò";
+        let emojiPrefix = "📅";
+        let typeLabel = "Khác";
+
+        if (e.type === 'anniversary') {
+          emojiPrefix = "💖 Kỷ niệm";
+          typeLabel = "Kỷ niệm ngày đặc biệt";
+        } else if (e.type === 'outing') {
+          emojiPrefix = "🌹 Hẹn hò";
+          typeLabel = "Buổi đi chơi / Hẹn hò lãng mạn";
+        } else if (e.type === 'school') {
+          emojiPrefix = "📚 Công việc";
+          typeLabel = "Học tập / Công việc";
+        } else if (e.type === 'other') {
+          emojiPrefix = "✨ Sự kiện";
+          typeLabel = "Hoạt động của cặp đôi";
+        }
+
+        const decoratedTitle = `${emojiPrefix}: ${rawTitle}`.replace(/[\r\n]/g, " ").replace(/[\\,;]/g, "\\$&");
+        
+        const descriptionBuilder = [
+          `Tiêu đề: ${rawTitle}`,
+          `Loại hoạt động: ${typeLabel}`,
+          `Thời gian: ${timeStr} ngày ${day}/${month}/${year}`,
+          e.creatorName ? `Lên lịch bởi: ${e.creatorName}` : "",
+          "----------------------------------------",
+          "Được đồng bộ hóa tự động từ ứng dụng quản lý cặp đôi Fintro AI ✨"
+        ].filter(Boolean).join("\\n");
+
+        icsContent += "BEGIN:VEVENT\r\n" +
+                      `UID:${id}@fintro.pro\r\n` +
+                      `DTSTAMP:${year}${month}${day}T000000Z\r\n` +
+                      `DTSTART;TZID=Asia/Ho_Chi_Minh:${startStr}\r\n` +
+                      `DTEND;TZID=Asia/Ho_Chi_Minh:${endStr}\r\n` +
+                      `SUMMARY:${decoratedTitle}\r\n` +
+                      `DESCRIPTION:${descriptionBuilder}\r\n` +
+                      "BEGIN:VALARM\r\n" +
+                      "TRIGGER:-PT30M\r\n" + // alarm 30 mins before
+                      "ACTION:DISPLAY\r\n" +
+                      `DESCRIPTION:Nhắc nhở cuộc hẹn: ${rawTitle.replace(/[\\,;]/g, "\\$&")}\r\n` +
+                      "END:VALARM\r\n" +
+                      "END:VEVENT\r\n";
       });
 
       icsContent += "END:VCALENDAR";
 
+      const filename = fundId ? "lich-dau-dau-fintro.ics" : "lich-ca-nhan-fintro.ics";
       res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-      res.setHeader("Content-Disposition", 'attachment; filename="lich-gia-dinh.ics"');
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       return res.send(icsContent);
 

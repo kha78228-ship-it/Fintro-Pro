@@ -21,6 +21,7 @@ export interface Transaction {
   recurringPeriod?: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'none';
   emotion?: string;
   categoryObj?: Category;
+  promoCode?: string;
 }
 
 export interface Budget {
