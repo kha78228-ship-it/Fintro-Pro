@@ -726,8 +726,10 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                   const isRangeView = selection && !isSameDay(selection.start, selection.end);
 
                   return (
-                    <button
+                    <div
                       key={idx}
+                      role="button"
+                      tabIndex={0}
                       onClick={(e) => {
                         handleDayClick(day, e);
                         // Open event form if clicking on an empty day slot
@@ -735,6 +737,12 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                           setShowEventForm(true);
                           setEditingEventId(null);
                           setEventForm({title: '', type: 'outing', time: '08:00'});
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleDayClick(day, e as any);
                         }
                       }}
                       onDoubleClick={(e) => {
@@ -765,7 +773,7 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                         }
                       }}
                       className={`
-                        group flex flex-col items-center justify-start p-2 sm:p-3 rounded-3xl min-h-[5rem] sm:min-h-[6rem] transition-all relative
+                        group flex flex-col items-center justify-start p-2 sm:p-3 rounded-3xl min-h-[5rem] sm:min-h-[6rem] transition-all relative cursor-pointer outline-none select-none
                         ${!isCurrentMonth && viewMode === 'month' ? 'opacity-30 grayscale' : 'opacity-100'}
                         ${isSelected 
                           ? isSelectionStart || isSelectionEnd 
@@ -848,7 +856,7 @@ const CalendarView = memo(({ transactions, onDelete, user, reducedMotion }: Cale
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
