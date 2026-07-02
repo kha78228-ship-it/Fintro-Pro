@@ -436,8 +436,8 @@ export default memo(function Reports({ transactions, chartPalette = 'default', s
           </div>
 
           <div className="card p-6 sm:p-10">
-            <h3 className="text-xl font-bold text-neutral-900 mb-2 border-l-4 border-neutral-600 pl-4 inset-y-1">Chi tiêu theo ngày (Tháng này)</h3>
-            <p className="text-sm text-neutral-400 mb-8 ml-5">Xu hướng chi tiêu trong 30 ngày gần nhất</p>
+            <h3 className="text-xl font-bold text-neutral-900 mb-2 border-l-4 border-neutral-600 pl-4 inset-y-1">Monthly Trend</h3>
+            <p className="text-sm text-neutral-400 mb-8 ml-5">Dòng tiền thu chi (Income vs Expense) trong tháng hiện tại</p>
             
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">

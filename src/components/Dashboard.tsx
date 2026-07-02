@@ -7,7 +7,7 @@ import {
   Plus, Gift, Cake, Star, Shirt, CalendarHeart, BookOpen, MessageSquareText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
 import { useCurrency } from '../lib/CurrencyContext';
 import { db, auth } from '../lib/firebase';
@@ -130,7 +130,7 @@ const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, app
     return () => unsubscribe();
   }, []);
   
-  const { todayExpense, weekExpense, monthExpense, yearExpense, totalIncome, totalGlobalExpense, balance } = useMemo(() => {
+  const { todayExpense, weekExpense, monthExpense, monthIncome, yearExpense, totalIncome, totalGlobalExpense, balance } = useMemo(() => {
     const todayS = new Date(new Date().setHours(0, 0, 0, 0));
     const weekS = new Date(new Date().setDate(new Date().getDate() - new Date().getDay()));
     const monthS = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -140,6 +140,10 @@ const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, app
       .filter(t => t.type === TransactionType.EXPENSE && new Date(t.date) >= startDate)
       .reduce((sum, t) => sum + t.amount, 0);
 
+    const calcTotalIncome = (startDate: Date) => transactions
+      .filter(t => t.type === TransactionType.INCOME && new Date(t.date) >= startDate)
+      .reduce((sum, t) => sum + t.amount, 0);
+
     const income = transactions.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
     const expense = transactions.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
 
@@ -147,6 +151,7 @@ const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, app
       todayExpense: calcTotal(todayS),
       weekExpense: calcTotal(weekS),
       monthExpense: calcTotal(monthS),
+      monthIncome: calcTotalIncome(monthS),
       yearExpense: calcTotal(yearS),
       totalIncome: income,
       totalGlobalExpense: expense,
@@ -180,6 +185,51 @@ const Dashboard = memo(({ transactions, onDeleteTransaction, setCurrentView, app
           .reduce((sum, t) => sum + t.amount, 0),
       };
     });
+  }, [transactions]);
+
+  const savingsGaugeData = useMemo(() => {
+    const expense = monthExpense;
+    const income = monthIncome;
+    let savings = income - expense;
+    let percent = 0;
+    
+    if (income > 0) {
+      if (savings < 0) savings = 0;
+      percent = (expense / income) * 100;
+      if (percent > 100) percent = 100;
+    }
+
+    return [
+      { name: 'Đã chi', value: income === 0 ? (expense > 0 ? 100 : 0) : percent, fill: '#f43f5e' },
+      { name: 'Khả dụng', value: income === 0 ? (expense > 0 ? 0 : 100) : 100 - percent, fill: '#e5e5e5' }
+    ];
+  }, [monthExpense, monthIncome]);
+
+  const savingsSparklineData = useMemo(() => {
+    const data = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const start = startOfMonth(new Date(today.getFullYear(), today.getMonth() - i, 1));
+      const end = endOfMonth(start);
+      const monthTx = transactions.filter(t => {
+        const d = new Date(t.date);
+        return d >= start && d <= end;
+      });
+      const inc = monthTx.filter(t => t.type === TransactionType.INCOME).reduce((sum, t) => sum + t.amount, 0);
+      const exp = monthTx.filter(t => t.type === TransactionType.EXPENSE).reduce((sum, t) => sum + t.amount, 0);
+      
+      let percent = 0;
+      if (inc > 0) {
+        const sav = inc - exp > 0 ? inc - exp : 0;
+        percent = (sav / inc) * 100;
+      }
+      
+      data.push({
+        name: format(start, 'MM/yy'),
+        value: parseFloat(percent.toFixed(1))
+      });
+    }
+    return data;
   }, [transactions]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -400,48 +450,107 @@ Hãy cùng nhau quản lý tài chính trên Fintro Pro!`;
           </div>
         </motion.div>
 
-        {/* Trend Chart */}
+        {/* Trend Chart and Gauge Chart */}
         <motion.div 
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="lg:col-span-2 bg-neo-bg border border-neo-dark p-6 shadow-[8px_8px_0_var(--color-neo-dark)] flex flex-col cursor-pointer group hover:bg-neutral-50 transition-colors"
-          whileHover={{ scale: 1.01, rotate: 0.5 }}
-          whileTap={{ scale: 0.99 }}
-          style={{ minHeight: '320px' }}
+          className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6"
         >
-           <div className="flex items-center justify-between mb-6">
-             <h3 className="text-sm font-bold text-neo-dark uppercase tracking-widest pl-3 border-l-4 border-neo-orange">Biểu đồ Tháng Này</h3>
-             <div className="flex gap-4">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-neutral-500"/><span className="text-[10px] font-bold uppercase text-neo-dark/70 tracking-widest">Thu</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-orange-500"/><span className="text-[10px] font-bold uppercase text-neo-dark/70 tracking-widest">Chi</span></div>
-             </div>
-           </div>
-           
-           <div className="flex-1 w-full relative">
-             {dailyTrendData.length > 0 ? (
-               <ResponsiveContainer width="100%" height="100%">
-                 <AreaChart data={dailyTrendData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorInc" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#888'}} dy={10} />
-                    <YAxis hide />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorInc)" />
-                    <Area type="monotone" dataKey="expense" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExp)" />
-                 </AreaChart>
-               </ResponsiveContainer>
-             ) : (
-               <div className="absolute inset-0 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-neo-dark/30">Chưa có dữ liệu</div>
-             )}
-           </div>
+          {/* Main Area Chart */}
+          <div className="md:col-span-2 bg-neo-bg border border-neo-dark p-6 shadow-[8px_8px_0_var(--color-neo-dark)] flex flex-col cursor-pointer group hover:bg-neutral-50 transition-colors" style={{ minHeight: '320px' }}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-sm font-bold text-neo-dark uppercase tracking-widest pl-3 border-l-4 border-neo-orange">Biểu đồ Tháng Này</h3>
+              <div className="flex gap-4">
+                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-neutral-500"/><span className="text-[10px] font-bold uppercase text-neo-dark/70 tracking-widest">Thu</span></div>
+                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-orange-500"/><span className="text-[10px] font-bold uppercase text-neo-dark/70 tracking-widest">Chi</span></div>
+              </div>
+            </div>
+            
+            <div className="flex-1 w-full relative">
+              {dailyTrendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dailyTrendData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                     <defs>
+                       <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
+                         <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.2}/>
+                         <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                       </linearGradient>
+                       <linearGradient id="colorInc" x1="0" y1="0" x2="0" y2="1">
+                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                         <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                       </linearGradient>
+                     </defs>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e5e5" />
+                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#888'}} dy={10} />
+                     <YAxis hide />
+                     <Tooltip content={<CustomTooltip />} />
+                     <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorInc)" />
+                     <Area type="monotone" dataKey="expense" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorExp)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-neo-dark/30">Chưa có dữ liệu</div>
+              )}
+            </div>
+          </div>
+
+          {/* Gauge Chart */}
+          <div className="md:col-span-1 bg-neo-bg border border-neo-dark p-6 shadow-[8px_8px_0_var(--color-neo-dark)] flex flex-col items-center justify-center cursor-pointer group hover:bg-neutral-50 transition-colors" style={{ minHeight: '320px' }}>
+            <h3 className="text-sm font-bold text-neo-dark uppercase tracking-widest pl-3 border-l-4 border-neo-orange self-start mb-6 w-full">Tiến Độ Tháng</h3>
+            <div className="w-full relative flex-1 flex flex-col items-center justify-center">
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie
+                    data={savingsGaugeData}
+                    cx="50%"
+                    cy="100%"
+                    startAngle={180}
+                    endAngle={0}
+                    innerRadius="70%"
+                    outerRadius="100%"
+                    paddingAngle={0}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {savingsGaugeData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-x-0 bottom-0 flex flex-col items-center translate-y-2">
+                <span className="text-2xl font-display font-bold text-neo-dark">
+                  {savingsGaugeData[0].value === 0 && savingsGaugeData[1].value === 100 ? '0%' : `${savingsGaugeData[0].value.toFixed(0)}%`}
+                </span>
+                <span className="text-[10px] uppercase font-bold text-neo-dark/60 tracking-widest">Đã chi</span>
+              </div>
+            </div>
+            <div className="mt-6 text-center w-full">
+              <p className="text-xs font-bold text-neo-dark truncate">Tổng thu: {formatMoney(monthIncome)}</p>
+              <p className="text-[10px] text-neo-dark/60 font-medium truncate mt-1">Khả dụng: {formatMoney(monthIncome > monthExpense ? monthIncome - monthExpense : 0)}</p>
+            </div>
+            {/* Sparkline for last 6 months */}
+            <div className="w-full mt-4 h-12 relative flex flex-col justify-end">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={savingsSparklineData}>
+                  <Line type="monotone" dataKey="value" stroke="#eab308" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-neo-bg border border-neo-dark p-1 text-[10px] shadow-[2px_2px_0_var(--color-neo-dark)]">
+                            <span className="font-bold">{payload[0].payload.name}: </span>
+                            {payload[0].value}%
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <span className="text-[8px] uppercase font-bold text-neo-dark/40 tracking-widest text-center mt-1">Lịch sử tiết kiệm (6T)</span>
+            </div>
+          </div>
         </motion.div>
       </div>
 

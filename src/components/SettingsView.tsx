@@ -67,7 +67,7 @@ export default memo(function SettingsView({
   appTheme,
   setAppTheme
 }: SettingsProps) {
-  const { currency, setCurrency } = useCurrency();
+  const { currency, setCurrency, privacyMode, setPrivacyMode } = useCurrency();
   const [activeTab, setActiveTab] = useState('account');
   const [customInput, setCustomInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -898,6 +898,24 @@ export default memo(function SettingsView({
                         {currency === curr.code && <Check className="w-4 h-4 shrink-0" />}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3 mt-6">
+                  <div className="flex items-center justify-between p-5 bg-neo-bg border border-neo-dark rounded-3xl shadow-[4px_4px_0_var(--color-neo-dark)]">
+                    <div>
+                      <h4 className="text-sm font-bold text-neo-dark uppercase tracking-widest mb-1">Chế Độ Riêng Tư</h4>
+                      <p className="text-[10px] text-neo-dark/60 font-medium">Ẩn số dư và số tiền trên Tổng quan khi xuất hiện ở nơi đông người.</p>
+                    </div>
+                    <button 
+                      onClick={() => setPrivacyMode(!privacyMode)}
+                      className={`relative w-12 h-6 rounded-full transition-colors duration-300 border border-neo-dark shrink-0 ${privacyMode ? 'bg-neo-orange' : 'bg-neo-dark/10'}`}
+                    >
+                      <motion.div 
+                         className="absolute top-[2px] left-[2px] w-4 h-4 bg-neo-light rounded-full border border-neo-dark"
+                         animate={{ x: privacyMode ? 24 : 0 }}
+                      />
+                    </button>
                   </div>
                 </div>
 

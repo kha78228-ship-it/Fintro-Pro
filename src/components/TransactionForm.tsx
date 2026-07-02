@@ -1,5 +1,5 @@
 import React, { useState, useRef, memo } from 'react';
-import { X, Plus, Minus, Calendar, Tag, FileText, Check, Mic, Loader2, Sparkles, Image as ImageIcon, Send, Clock, Repeat } from 'lucide-react';
+import { X, Plus, Minus, Calendar, Tag, FileText, Check, Mic, Loader2, Sparkles, Image as ImageIcon, Send, Clock, Repeat, Delete } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { TransactionType, Transaction, TransactionStatus } from '../types';
 import { DEFAULT_CATEGORIES } from '../lib/categories';
@@ -34,6 +34,7 @@ export default memo(function TransactionForm({ isOpen, onClose, inline, onSucces
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
   const [smartText, setSmartText] = useState('');
   const [promoCode, setPromoCode] = useState('');
+  const [showNumpad, setShowNumpad] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,6 +47,30 @@ export default memo(function TransactionForm({ isOpen, onClose, inline, onSucces
           const formattedValue = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
           setAmount(formattedValue);
       }
+  };
+
+  const handleNumpadInput = (keyValue: string) => {
+    let rawValue = amount.replace(/\./g, '');
+    if (keyValue === 'backspace') {
+      rawValue = rawValue.slice(0, -1);
+    } else {
+      rawValue += keyValue;
+    }
+
+    if (rawValue === '') {
+      setAmount('');
+      return;
+    }
+    
+    // Prevent starting with multiple zeros
+    if (rawValue.length > 1 && rawValue.startsWith('0') && !rawValue.startsWith('000')) {
+        rawValue = rawValue.replace(/^0+/, '');
+    }
+
+    if (/^\d*$/.test(rawValue)) {
+      const formattedValue = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      setAmount(formattedValue);
+    }
   };
 
   const processImageInput = async (file: File) => {
@@ -492,10 +517,51 @@ CHÚ Ý CÁC BƯỚC SAU THẬT KỸ:
               required
               value={amount}
               onChange={handleAmountChange}
+              onFocus={() => setShowNumpad(true)}
+              inputMode={showNumpad ? "none" : "decimal"}
               placeholder="0"
               className="w-full bg-[#f8f9fa] border border-neutral-200 rounded-3xl py-4 pl-10 pr-4 text-2xl font-bold font-mono text-neutral-900 focus:ring-2 focus:ring-neutral-900 outline-none transition-all placeholder:text-neutral-300"
             />
           </div>
+          <AnimatePresence>
+            {showNumpad && (
+              <motion.div
+                 initial={{ height: 0, opacity: 0 }}
+                 animate={{ height: 'auto', opacity: 1 }}
+                 exit={{ height: 0, opacity: 0 }}
+                 className="overflow-hidden"
+              >
+                 <div className="bg-[#f8f9fa] rounded-3xl p-3 border border-neutral-200 mt-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, '000', 0].map(num => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => handleNumpadInput(num.toString())}
+                          className="bg-white rounded-2xl py-3.5 text-xl font-bold text-neutral-800 shadow-sm transition-transform active:scale-95 active:bg-neutral-100"
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => handleNumpadInput('backspace')}
+                        className="bg-white rounded-2xl py-3.5 text-xl font-bold text-neutral-800 shadow-sm transition-transform active:scale-95 active:bg-neutral-100 flex items-center justify-center text-orange-500"
+                      >
+                        <Delete className="w-6 h-6" />
+                      </button>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowNumpad(false)} 
+                      className="w-full mt-3 py-3 rounded-2xl bg-neutral-900 text-white font-bold text-sm active:scale-95 transition-transform shadow-md"
+                    >
+                      Xong
+                    </button>
+                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

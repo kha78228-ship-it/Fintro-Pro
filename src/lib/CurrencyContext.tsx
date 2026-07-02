@@ -15,15 +15,19 @@ export const CURRENCIES = [
 interface CurrencyContextType {
   currency: string;
   setCurrency: (c: string) => void;
-  formatMoney: (amount: number, maxFractionDigits?: number) => string;
+  formatMoney: (amount: number, maxFractionDigits?: number, ignorePrivacy?: boolean) => string;
   currencySymbol: string;
+  privacyMode: boolean;
+  setPrivacyMode: (v: boolean) => void;
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currency, setCurrencyState] = useState(() => localStorage.getItem('__fintro_currency') || 'VND');
+  const [privacyMode, setPrivacyModeState] = useState(() => localStorage.getItem('__fintro_privacy') === 'true');
   const currencySymbol = CURRENCIES.find(x => x.code === currency)?.symbol || 'đ';
+
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -69,7 +73,8 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
-  const formatMoney = (amount: number, maxFractionDigits?: number) => {
+  const formatMoney = (amount: number, maxFractionDigits?: number, ignorePrivacy?: boolean) => {
+    if (privacyModeState && !ignorePrivacy) return '******';
     const c = CURRENCIES.find(x => x.code === currency) || CURRENCIES[0];
     const isZeroDecimal = c.code === 'VND' || c.code === 'JPY' || c.code === 'KRW';
     
@@ -85,8 +90,13 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }).format(amount);
   };
 
+  const setPrivacyMode = (v: boolean) => {
+    setPrivacyModeState(v);
+    localStorage.setItem('__fintro_privacy', String(v));
+  };
+
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency, formatMoney, currencySymbol }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency, formatMoney, currencySymbol, privacyMode, setPrivacyMode }}>
       {children}
     </CurrencyContext.Provider>
   );

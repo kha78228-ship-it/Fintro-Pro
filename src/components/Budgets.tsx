@@ -18,11 +18,14 @@ import {
   Wallet, 
   TrendingUp, 
   TrendingDown, 
-  AlertCircle 
+  AlertCircle,
+  Calendar,
+  Loader2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCurrency } from '../lib/CurrencyContext';
+import { createCalendarEvent, getWorkspaceToken } from '../lib/workspaceServices';
 
 interface BudgetsProps {
   transactions: any[];
@@ -35,6 +38,44 @@ export default function Budgets({ transactions, reducedMotion }: BudgetsProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
   const [newBudget, setNewBudget] = useState({ categoryId: DEFAULT_CATEGORIES[0].id, amount: '' });
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncCalendar = async () => {
+    const token = getWorkspaceToken();
+    if (!token) {
+      alert("Vui lòng kết nối Google Workspace để sử dụng tính năng này.");
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      const today = new Date();
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      endOfMonth.setHours(20, 0, 0, 0); // 8 PM
+      
+      const endTime = new Date(endOfMonth.getTime() + 60 * 60 * 1000); // 9 PM
+
+      let description = `Đánh giá ngân sách tháng ${today.getMonth() + 1}:\n\n`;
+      budgets.forEach(b => {
+        const cat = DEFAULT_CATEGORIES.find(c => c.id === b.categoryId);
+        description += `- ${cat?.name || 'Khác'}: Hạn mức ${formatMoney(b.amount)}\n`;
+      });
+
+      await createCalendarEvent(token, {
+        summary: `📊 Fintro: Đánh giá ngân sách tháng ${today.getMonth() + 1}`,
+        description,
+        start: { dateTime: endOfMonth.toISOString() },
+        end: { dateTime: endTime.toISOString() },
+      });
+      
+      alert("Đã tạo sự kiện nhắc nhở đánh giá ngân sách trên Google Calendar!");
+    } catch (error) {
+      console.error(error);
+      alert("Có lỗi xảy ra khi tạo sự kiện trên Calendar.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -166,13 +207,23 @@ export default function Budgets({ transactions, reducedMotion }: BudgetsProps) {
           </h2>
           <p className="text-sm text-neutral-500 mt-1">Thiết lập giới hạn để quản lý tốc độ và kỷ luật chi tiêu cá nhân</p>
         </div>
-        <button 
-          onClick={() => setIsAdding(!isAdding)}
-          className="flex items-center gap-2 text-sm font-bold py-3 px-5 bg-neutral-900 text-white rounded-3xl shadow-md hover:bg-neutral-800 transition-all cursor-pointer select-none active:scale-95 shrink-0"
-        >
-          {isAdding ? <X className="w-4.5 h-4.5" /> : <Plus className="w-4.5 h-4.5" />}
-          {isAdding ? 'Hủy bỏ' : 'Thêm ngân sách'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncCalendar}
+            disabled={isSyncing}
+            className="flex items-center gap-2 text-sm font-bold py-3 px-5 bg-white text-neutral-700 border border-neutral-200 rounded-3xl shadow-sm hover:bg-neutral-50 transition-all cursor-pointer select-none active:scale-95 shrink-0 disabled:opacity-50"
+          >
+            {isSyncing ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <Calendar className="w-4.5 h-4.5" />}
+            Đồng bộ Calendar
+          </button>
+          <button 
+            onClick={() => setIsAdding(!isAdding)}
+            className="flex items-center gap-2 text-sm font-bold py-3 px-5 bg-neutral-900 text-white rounded-3xl shadow-md hover:bg-neutral-800 transition-all cursor-pointer select-none active:scale-95 shrink-0"
+          >
+            {isAdding ? <X className="w-4.5 h-4.5" /> : <Plus className="w-4.5 h-4.5" />}
+            {isAdding ? 'Hủy bỏ' : 'Thêm ngân sách'}
+          </button>
+        </div>
       </div>
 
       {/* Bento Grid Stats Card Bar */}

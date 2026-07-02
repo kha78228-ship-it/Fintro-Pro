@@ -476,33 +476,37 @@ export default memo(function TransactionList({ transactions, onDelete, hideHeade
                         </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      {group.items.map((t, idx) => (
-                        <TransactionItem 
-                            key={t.id} 
-                            t={t} 
-                            idx={idx} 
-                            onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
-                            formatMoney={formatMoney} 
-                            reducedMotion={reducedMotion}
-                        />
-                      ))}
-                    </div>
+                    <motion.div layout className="space-y-1">
+                      <AnimatePresence initial={false} mode="popLayout">
+                        {group.items.map((t, idx) => (
+                          <TransactionItem 
+                              key={t.id} 
+                              t={t} 
+                              idx={idx} 
+                              onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
+                              formatMoney={formatMoney} 
+                              reducedMotion={reducedMotion}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </motion.div>
                   </motion.div>
                 ))
               ) : (
-                <div className="space-y-1">
-                  {paginatedTransactions.map((t, idx) => (
-                    <TransactionItem 
-                        key={t.id} 
-                        t={t} 
-                        idx={idx} 
-                        onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
-                        formatMoney={formatMoney} 
-                        reducedMotion={reducedMotion}
-                    />
-                  ))}
-                </div>
+                <motion.div layout className="space-y-1">
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {paginatedTransactions.map((t, idx) => (
+                      <TransactionItem 
+                          key={t.id} 
+                          t={t} 
+                          idx={idx} 
+                          onDeleteRequest={onDelete ? (id) => setConfirmDeleteId(id) : undefined}
+                          formatMoney={formatMoney} 
+                          reducedMotion={reducedMotion}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
               )}
               {totalPages > 1 && (
                 <div className="flex justify-center items-center gap-2 pt-4 border-t border-neutral-100">
